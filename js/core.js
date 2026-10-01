@@ -1,0 +1,1078 @@
+/**
+ * core.js —— 小账本 · 数据层模块
+ *
+ * 暴露全局对象 Store（普通 <script> 引入，无模块系统，不依赖任何外部库）。
+ * 数据统一持久化在 localStorage，键名为 jz_data_v1。
+ *
+ * 数据结构：
+ *   {
+ *     records: [      // 账单记录（本应用只有支出）
+ *       { id:'r1696...', type:'expense', amount:25.5, categoryId:'canyin',
+ *         date:'2026-10-01', note:'午餐', createdAt:16961... }
+ *     ],
+ *     categories: [   // 分类（10 个默认预设 + 用户自建）
+ *       { id:'canyin', name:'餐饮', icon:'🍜', color:'#FF7043', custom:false, sort:1 }
+ *     ],
+ *     budgets: { monthly: null }   // 每月预算，Number | null
+ *   }
+ *
+ * 对外 API 一览：
+ *   load()  save(data)
+ *   getRecords()  getMonthRecords(ym)  getRecord(id)
+ *   addRecord({amount,categoryId,date,note})  updateRecord(id,patch)  deleteRecord(id)
+ *   getCategories()  addCategory({name,icon})  updateCategory(id,{name,icon})  deleteCategory(id)
+ *   getBudget()  setBudget(amount)
+ *   getMonthSummary(ym)  getBudgetStatus(ym)
+ *   exportJSON()  importJSON(text)  exportCSV(ym)
+ *   formatAmount(n)  todayStr()  ymOf(dateStr)  currentYm()
+ *
+ * 约定：不操作 DOM；日期一律使用本地时区（手动拼接年月日，
+ *       不用 toISOString，避免 UTC 偏移导致日期错一天）。
+ */
+var Store = (function () {
+  'use strict';
+
+  // ==================== 常量 ====================
+
+  // ==================== 账户命名空间 ====================
+  // 多账户：每个账户的数据存在独立的 localStorage 键下。
+  // 未绑定账户时使用旧版单用户键 jz_data_v1（兼容历史数据）。
+
+  /** 当前绑定的账户名（null 表示未绑定，用旧版键） */
+  var _username = null;
+
+  /** 当前生效的 localStorage 键名 */
+  function storageKey() {
+    return _username ? 'jz_data_v1::' + _username : 'jz_data_v1';
+  }
+
+  /**
+   * 绑定数据所属账户（登录/切换账户后由 app.js 调用），并清空内存缓存，
+   * 之后的读写都指向该账户独立的数据空间。
+   * @param {string|null} username 账户名；null 表示回到旧版单用户空间
+   */
+  function setUser(username) {
+    _username = username || null;
+    _data = null;
+  }
+
+  /** 当前绑定的账户名，未绑定时返回 null */
+  function storageUser() {
+    return _username;
+  }
+
+  /** 默认预设分类（首次 load 时初始化写入） */
+  var DEFAULT_CATEGORIES = [
+    { id: 'canyin',   name: '餐饮', icon: '🍜', color: '#FF7043', custom: false, sort: 1 },
+    { id: 'jiaotong', name: '交通', icon: '🚇', color: '#42A5F5', custom: false, sort: 2 },
+    { id: 'gouwu',    name: '购物', icon: '🛍️', color: '#AB47BC', custom: false, sort: 3 },
+    { id: 'yule',     name: '娱乐', icon: '🎮', color: '#FFA726', custom: false, sort: 4 },
+    { id: 'riyong',   name: '日用', icon: '🧴', color: '#26A69A', custom: false, sort: 5 },
+    { id: 'juzhu',    name: '居住', icon: '🏠', color: '#8D6E63', custom: false, sort: 6 },
+    { id: 'yiliao',   name: '医疗', icon: '💊', color: '#EF5350', custom: false, sort: 7 },
+    { id: 'xuexi',    name: '学习', icon: '📚', color: '#5C6BC0', custom: false, sort: 8 },
+    { id: 'renqing',  name: '人情', icon: '🎁', color: '#EC407A', custom: false, sort: 9 },
+    { id: 'qita',     name: '其他', icon: '📦', color: '#78909C', custom: false, sort: 10 }
+  ];
+
+  /** 内置 10 色调色板：新增分类按 sort 顺延取色，取完一轮后循环复用 */
+  var PALETTE = [
+    '#FF7043', '#42A5F5', '#AB47BC', '#FFA726', '#26A69A',
+    '#8D6E63', '#EF5350', '#5C6BC0', '#EC407A', '#78909C'
+  ];
+
+  /** 分类信息缺失时的兜底显示（例如导入数据里指向了不存在的分类） */
+  var FALLBACK_CATEGORY = { name: '未知分类', icon: '🏷️', color: '#90A4AE' };
+
+  /** 合法日期字符串：YYYY-MM-DD，且月/日取值范围正确 */
+  var DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+  /** 合法颜色字符串：#RGB / #RRGGBB / #RRGGBBAA */
+  var COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
+
+  // ==================== 内部状态 ====================
+
+  /** 内存缓存。首次调用任一 API 时自动 load；所有读写都经过它 */
+  var _data = null;
+
+  // ==================== 内部工具 ====================
+
+  /**
+   * 判断对象自身是否拥有某属性
+   * @param {Object} obj
+   * @param {string} key
+   * @returns {boolean}
+   */
+  function hasOwn(obj, key) {
+    return Object.prototype.hasOwnProperty.call(obj, key);
+  }
+
+  /**
+   * 浅拷贝一个纯数据对象（用于对外返回副本，避免外部改动污染内部缓存）
+   * @param {Object} o
+   * @returns {Object}
+   */
+  function copyObj(o) {
+    var c = {};
+    for (var k in o) {
+      if (hasOwn(o, k)) {
+        c[k] = o[k];
+      }
+    }
+    return c;
+  }
+
+  /**
+   * 金额四舍五入保留两位小数
+   * @param {number} n
+   * @returns {number}
+   */
+  function round2(n) {
+    return Math.round(n * 100) / 100;
+  }
+
+  /**
+   * 个位数补零：9 → '09'
+   * @param {number} n
+   * @returns {string}
+   */
+  function pad2(n) {
+    return (n < 10 ? '0' : '') + n;
+  }
+
+  /**
+   * Date 对象 → 本地时区 'YYYY-MM-DD'（手动拼接，不用 toISOString）
+   * @param {Date} d
+   * @returns {string}
+   */
+  function dateToStr(d) {
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  /**
+   * 校验并规范日期字符串：形如 YYYY-MM-DD 才认可，否则返回空串
+   * @param {*} v
+   * @returns {string} 合法返回原串，非法返回 ''
+   */
+  function normalizeDateStr(v) {
+    if (typeof v === 'string' && DATE_RE.test(v.trim())) {
+      return v.trim();
+    }
+    return '';
+  }
+
+  /**
+   * 规范备注：转字符串、去首尾空格，可为空字符串
+   * @param {*} v
+   * @returns {string}
+   */
+  function normalizeNote(v) {
+    if (v === null || v === undefined) {
+      return '';
+    }
+    return String(v).trim();
+  }
+
+  /**
+   * 规范分类 id：非空字符串才认可，否则回退到「其他」
+   * @param {*} v
+   * @returns {string}
+   */
+  function normalizeCategoryId(v) {
+    if (typeof v === 'string' && v.trim()) {
+      return v.trim();
+    }
+    return 'qita';
+  }
+
+  /**
+   * 校验金额：必须是有限正数（数字或数字字符串均可），非法抛异常
+   * @param {*} v
+   * @returns {number} 保留两位小数
+   * @throws {Error} '金额不合法'
+   */
+  function parsePositiveAmount(v) {
+    var n = Number(v);
+    if (!isFinite(n) || n <= 0) {
+      throw new Error('金额不合法');
+    }
+    return round2(n);
+  }
+
+  /**
+   * 生成唯一 id：前缀 + 时间戳 + 随机数（可传入已有 id 集合保证不重复）
+   * @param {string} prefix 'r' | 'c'
+   * @param {Object=} seen  已存在 id 的集合（可选）
+   * @param {number=} extra  附加后缀（导入批量补 id 时用于强制唯一）
+   * @returns {string}
+   */
+  function makeUniqueId(prefix, seen, extra) {
+    var id;
+    do {
+      id = prefix + Date.now() + Math.random().toString(36).slice(2, 8) +
+        (extra === undefined ? '' : '_' + extra);
+    } while (seen && seen[id]);
+    if (seen) {
+      seen[id] = true;
+    }
+    return id;
+  }
+
+  /**
+   * 按 sort 序号从调色板取色（序号超出调色板长度后循环复用）
+   * @param {number} sort
+   * @returns {string}
+   */
+  function paletteColor(sort) {
+    var i = Math.floor(Number(sort) || 1) - 1;
+    if (i < 0) {
+      i = 0;
+    }
+    return PALETTE[i % PALETTE.length];
+  }
+
+  /**
+   * 记录排序（不影响原数组）：date 倒序，同日按 createdAt 倒序
+   * @param {Array} list
+   * @returns {Array} 排好序的浅拷贝数组
+   */
+  function sortRecordsForRead(list) {
+    var arr = list.slice();
+    arr.sort(function (a, b) {
+      if (a.date === b.date) {
+        return (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0);
+      }
+      return a.date > b.date ? -1 : 1;
+    });
+    return arr.map(copyObj);
+  }
+
+  // ==================== 数据规范（读取/保存时的容错清洗） ====================
+
+  /**
+   * 规范预算对象：monthly 只可能是正数（两位小数）或 null
+   * @param {*} b
+   * @returns {{monthly: (number|null)}}
+   */
+  function normalizeBudgets(b) {
+    var out = { monthly: null };
+    if (b && typeof b === 'object' && !Array.isArray(b)) {
+      if (b.monthly === null) {
+        out.monthly = null;
+      } else {
+        var n = Number(b.monthly);
+        if (isFinite(n) && n > 0) {
+          out.monthly = round2(n);
+        }
+        // 非法预算容错：视为未设置
+      }
+    }
+    return out;
+  }
+
+  /**
+   * 清洗一份数据对象：结构不完整/字段非法时做兜底，绝不让页面崩溃。
+   * 个别彻底无法使用的脏记录/脏分类会被丢弃（金额非法、名称为空）。
+   * @param {*} parsed 从 localStorage 或导入文件解析出的对象
+   * @returns {{records:Array, categories:Array, budgets:{monthly:(number|null)}}}
+   */
+  function sanitizeData(parsed) {
+    var out = { records: [], categories: [], budgets: { monthly: null } };
+    if (!parsed || typeof parsed !== 'object') {
+      return out;
+    }
+
+    // ---- 记录 ----
+    if (Array.isArray(parsed.records)) {
+      parsed.records.forEach(function (r, i) {
+        if (!r || typeof r !== 'object' || Array.isArray(r)) {
+          return;
+        }
+        var amount = Number(r.amount);
+        if (!isFinite(amount) || amount <= 0) {
+          return; // 金额非法的记录无法使用，丢弃
+        }
+        var createdAt = Number(r.createdAt);
+        out.records.push({
+          id: (typeof r.id === 'string' && r.id) ? r.id : makeUniqueId('r', null, i),
+          type: (typeof r.type === 'string' && r.type) ? r.type : 'expense',
+          amount: round2(amount),
+          categoryId: normalizeCategoryId(r.categoryId),
+          date: normalizeDateStr(r.date) || todayStr(),
+          note: normalizeNote(r.note),
+          createdAt: isFinite(createdAt) ? createdAt : Date.now()
+        });
+      });
+    }
+
+    // ---- 分类 ----
+    if (Array.isArray(parsed.categories)) {
+      parsed.categories.forEach(function (c, i) {
+        if (!c || typeof c !== 'object' || Array.isArray(c)) {
+          return;
+        }
+        var name = (typeof c.name === 'string') ? c.name.trim() : '';
+        if (!name) {
+          return; // 无名分类无法使用，丢弃
+        }
+        var sort = Number(c.sort);
+        if (!isFinite(sort) || sort <= 0) {
+          sort = i + 1;
+        }
+        var icon = (typeof c.icon === 'string' && c.icon.trim()) ? c.icon.trim() : '🏷️';
+        var color = (typeof c.color === 'string' && COLOR_RE.test(c.color.trim()))
+          ? c.color.trim() : paletteColor(sort);
+        out.categories.push({
+          id: (typeof c.id === 'string' && c.id) ? c.id : makeUniqueId('c', null, i),
+          name: name,
+          icon: icon,
+          color: color,
+          custom: (typeof c.custom === 'boolean') ? c.custom : false,
+          sort: sort
+        });
+      });
+    }
+
+    // ---- 预算 ----
+    out.budgets = normalizeBudgets(parsed.budgets);
+    return out;
+  }
+
+  /**
+   * 生成一份全新的默认数据（含 10 个预设分类）
+   * @returns {{records:Array, categories:Array, budgets:{monthly:null}}}
+   */
+  function defaultData() {
+    return {
+      records: [],
+      categories: DEFAULT_CATEGORIES.map(copyObj),
+      budgets: { monthly: null }
+    };
+  }
+
+  /**
+   * 把内存缓存写入 localStorage（失败只警告，不抛异常）
+   * @returns {boolean} 是否写入成功
+   */
+  function persist() {
+    try {
+      localStorage.setItem(storageKey(), JSON.stringify(_data));
+      return true;
+    } catch (e) {
+      console.warn('[core.js] 写入 localStorage 失败：', e);
+      return false;
+    }
+  }
+
+  /**
+   * 取内部数据（惰性初始化：未 load 时自动 load 一次）
+   * @returns {{records:Array, categories:Array, budgets:Object}}
+   */
+  function getData() {
+    if (!_data) {
+      load();
+    }
+    return _data;
+  }
+
+  /**
+   * 深拷贝一份数据对外返回（records/categories 均为逐条浅拷贝），
+   * 保证外部改动不会污染内部缓存。
+   */
+  function cloneData(d) {
+    return {
+      records: d.records.map(copyObj),
+      categories: d.categories.map(copyObj),
+      budgets: { monthly: d.budgets.monthly }
+    };
+  }
+
+  // ==================== 对外 API：加载与保存 ====================
+
+  /**
+   * 加载完整数据对象。
+   * localStorage 无数据或解析失败时，初始化默认数据（含预设分类）并保存；
+   * 解析失败只 console.warn 并重置为默认，绝不抛异常导致页面崩溃。
+   * @returns {{records:Array, categories:Array, budgets:{monthly:(number|null)}}}
+   */
+  function load() {
+    var raw = null;
+    try {
+      raw = localStorage.getItem(storageKey());
+    } catch (e) {
+      console.warn('[core.js] 读取 localStorage 失败，将使用默认数据：', e);
+    }
+
+    if (raw) {
+      try {
+        _data = sanitizeData(JSON.parse(raw));
+      } catch (e) {
+        console.warn('[core.js] 本地数据解析失败，已重置为默认数据：', e);
+        _data = defaultData();
+        persist();
+      }
+    } else {
+      _data = defaultData();
+      persist();
+    }
+    return cloneData(_data);
+  }
+
+  /**
+   * 保存完整数据对象到 localStorage（会先做一次结构清洗，保证内部数据形状正确）
+   * @param {{records:Array, categories:Array, budgets:Object}} data
+   * @returns {boolean} 是否写入成功
+   */
+  function save(data) {
+    if (!data || typeof data !== 'object') {
+      console.warn('[core.js] save 参数必须是完整数据对象，已忽略本次保存');
+      return false;
+    }
+    _data = sanitizeData(data);
+    return persist();
+  }
+
+  // ==================== 对外 API：账单记录 ====================
+
+  /**
+   * 所有记录，按 date 倒序、同日按 createdAt 倒序
+   * @returns {Array}
+   */
+  function getRecords() {
+    return sortRecordsForRead(getData().records);
+  }
+
+  /**
+   * 某个月的记录（ym 形如 '2026-10'），排序规则同 getRecords
+   * @param {string=} ym 缺省时取当前月
+   * @returns {Array}
+   */
+  function getMonthRecords(ym) {
+    var month = ym || currentYm();
+    var list = getData().records.filter(function (r) {
+      return ymOf(r.date) === month;
+    });
+    return sortRecordsForRead(list);
+  }
+
+  /**
+   * 按 id 查记录
+   * @param {string} id
+   * @returns {Object|null}
+   */
+  function getRecord(id) {
+    var records = getData().records;
+    for (var i = 0; i < records.length; i++) {
+      if (records[i].id === id) {
+        return copyObj(records[i]);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 新增一笔支出记录
+   * @param {{amount:*, categoryId:string, date:string, note:string=}} input
+   * @returns {Object} 新记录
+   * @throws {Error} '金额不合法'
+   */
+  function addRecord(input) {
+    var opts = input || {};
+    var amount = parsePositiveAmount(opts.amount); // 先校验，非法直接抛错、不动数据
+    var data = getData();
+    var seen = {};
+    data.records.forEach(function (r) { seen[r.id] = true; });
+
+    var rec = {
+      id: makeUniqueId('r', seen),      // 'r' + 时间戳 + 随机数
+      type: 'expense',                   // 固定为支出
+      amount: amount,                    // 两位小数
+      categoryId: normalizeCategoryId(opts.categoryId),
+      date: normalizeDateStr(opts.date) || todayStr(), // 日期缺省/非法时记今天
+      note: normalizeNote(opts.note),    // 去空格，可为空字符串
+      createdAt: Date.now()
+    };
+    data.records.push(rec);
+    persist();
+    return copyObj(rec);
+  }
+
+  /**
+   * 按 id 合并更新记录（仅处理 amount/categoryId/date/note 这几个字段）
+   * @param {string} id
+   * @param {Object} patch 要更新的字段
+   * @returns {Object|null} 更新后的记录；id 不存在返回 null
+   * @throws {Error} '金额不合法'
+   */
+  function updateRecord(id, patch) {
+    var data = getData();
+    var rec = null;
+    for (var i = 0; i < data.records.length; i++) {
+      if (data.records[i].id === id) {
+        rec = data.records[i];
+        break;
+      }
+    }
+    if (!rec) {
+      return null;
+    }
+
+    var p = patch || {};
+    // 金额先整体校验，非法时不做任何修改
+    var newAmount = hasOwn(p, 'amount') ? parsePositiveAmount(p.amount) : null;
+
+    if (newAmount !== null) {
+      rec.amount = newAmount;
+    }
+    if (hasOwn(p, 'categoryId')) {
+      rec.categoryId = normalizeCategoryId(p.categoryId);
+    }
+    if (hasOwn(p, 'date')) {
+      var d = normalizeDateStr(p.date);
+      if (d) {
+        rec.date = d; // 传入的日期非法/为空时保持原值
+      }
+    }
+    if (hasOwn(p, 'note')) {
+      rec.note = normalizeNote(p.note);
+    }
+    persist();
+    return copyObj(rec);
+  }
+
+  /**
+   * 按 id 删除记录
+   * @param {string} id
+   * @returns {true}
+   */
+  function deleteRecord(id) {
+    var data = getData();
+    data.records = data.records.filter(function (r) {
+      return r.id !== id;
+    });
+    persist();
+    return true;
+  }
+
+  // ==================== 对外 API：分类 ====================
+
+  /**
+   * 全部分类，按 sort 升序
+   * @returns {Array}
+   */
+  function getCategories() {
+    var list = getData().categories.slice();
+    list.sort(function (a, b) {
+      return (Number(a.sort) || 0) - (Number(b.sort) || 0);
+    });
+    return list.map(copyObj);
+  }
+
+  /**
+   * 新增自定义分类
+   * @param {{name:string, icon:string=}} input
+   * @returns {Object} 新分类
+   * @throws {Error} '分类名称不能为空' / '分类已存在'
+   */
+  function addCategory(input) {
+    var opts = input || {};
+    var name = (typeof opts.name === 'string') ? opts.name.trim() : '';
+    if (!name) {
+      throw new Error('分类名称不能为空');
+    }
+    var data = getData();
+
+    // 查重（按去空格后的名称精确比较）
+    for (var i = 0; i < data.categories.length; i++) {
+      if (data.categories[i].name === name) {
+        throw new Error('分类已存在');
+      }
+    }
+
+    // sort 顺延：当前最大 sort + 1
+    var maxSort = 0;
+    data.categories.forEach(function (c) {
+      var s = Number(c.sort);
+      if (isFinite(s) && s > maxSort) {
+        maxSort = s;
+      }
+    });
+    var sort = maxSort + 1;
+
+    // id：'c' + 时间戳；同一毫秒内连续新增可能撞 id，此时追加随机数保证唯一
+    var catId = 'c' + Date.now();
+    var existIds = {};
+    data.categories.forEach(function (c) { existIds[c.id] = true; });
+    while (existIds[catId]) {
+      catId = 'c' + Date.now() + Math.random().toString(36).slice(2, 6);
+    }
+
+    var cat = {
+      id: catId,
+      name: name,
+      icon: (typeof opts.icon === 'string' && opts.icon.trim()) ? opts.icon.trim() : '🏷️',
+      color: paletteColor(sort),            // 从调色板按 sort 顺延取色
+      custom: true,
+      sort: sort
+    };
+    data.categories.push(cat);
+    persist();
+    return copyObj(cat);
+  }
+
+  /**
+   * 更新分类（名称/图标）
+   * @param {string} id
+   * @param {{name:string=, icon:string=}} patch
+   * @returns {Object|null} 更新后的分类；id 不存在返回 null
+   * @throws {Error} '分类名称不能为空' / '分类已存在'
+   */
+  function updateCategory(id, patch) {
+    var data = getData();
+    var cat = null;
+    for (var i = 0; i < data.categories.length; i++) {
+      if (data.categories[i].id === id) {
+        cat = data.categories[i];
+        break;
+      }
+    }
+    if (!cat) {
+      return null;
+    }
+
+    var p = patch || {};
+    var newName = null;
+    if (hasOwn(p, 'name')) {
+      newName = (typeof p.name === 'string') ? p.name.trim() : '';
+      if (!newName) {
+        throw new Error('分类名称不能为空');
+      }
+      // 查重时排除自身
+      for (var j = 0; j < data.categories.length; j++) {
+        if (data.categories[j].id !== id && data.categories[j].name === newName) {
+          throw new Error('分类已存在');
+        }
+      }
+    }
+    if (newName !== null) {
+      cat.name = newName;
+    }
+    if (hasOwn(p, 'icon')) {
+      var icon = (typeof p.icon === 'string') ? p.icon.trim() : '';
+      cat.icon = icon || '🏷️'; // 图标清空则回退默认
+    }
+    persist();
+    return copyObj(cat);
+  }
+
+  /**
+   * 删除分类（预设分类同样允许删除）。
+   * 若仍有账单记录使用该分类，则拒绝删除。
+   * @param {string} id
+   * @returns {true}
+   * @throws {Error} '该分类下还有账单记录，无法删除'
+   */
+  function deleteCategory(id) {
+    var data = getData();
+    var used = data.records.some(function (r) {
+      return r.categoryId === id;
+    });
+    if (used) {
+      throw new Error('该分类下还有账单记录，无法删除');
+    }
+    data.categories = data.categories.filter(function (c) {
+      return c.id !== id;
+    });
+    persist();
+    return true;
+  }
+
+  // ==================== 对外 API：预算 ====================
+
+  /**
+   * 当前每月预算
+   * @returns {number|null}
+   */
+  function getBudget() {
+    return getData().budgets.monthly;
+  }
+
+  /**
+   * 设置每月预算
+   * @param {number|string|null} amount null 表示清除预算；正数表示预算金额
+   * @returns {number|null} 设置后的值
+   * @throws {Error} '预算不合法'
+   */
+  function setBudget(amount) {
+    var data = getData();
+    if (amount === null) {
+      data.budgets.monthly = null;
+      persist();
+      return null;
+    }
+    var n = Number(amount);
+    if (!isFinite(n) || n <= 0) {
+      throw new Error('预算不合法');
+    }
+    data.budgets.monthly = round2(n);
+    persist();
+    return data.budgets.monthly;
+  }
+
+  // ==================== 对外 API：统计 ====================
+
+  /**
+   * 某月支出汇总
+   * @param {string=} ym 形如 '2026-10'，缺省时取当前月
+   * @returns {{ym:string, total:number, count:number,
+   *            byCategory:Array<{id,name,icon,color,total}>,
+   *            daily:Array<{date:string, total:number}>}}
+   *          byCategory 按 total 降序（只含有支出的分类）；
+   *          daily 按 date 升序（只含有记录的日期）
+   */
+  function getMonthSummary(ym) {
+    var month = ym || currentYm();
+    var list = getMonthRecords(month); // 已按日期倒序的记录副本
+    var data = getData();
+
+    var total = 0;
+    var catSums = {};   // categoryId -> 合计
+    var catOrder = [];  // 保持首次出现顺序
+    var dateSums = {};  // date -> 合计
+
+    list.forEach(function (r) {
+      var amt = Number(r.amount) || 0;
+      total += amt;
+      if (!hasOwn(catSums, r.categoryId)) {
+        catSums[r.categoryId] = 0;
+        catOrder.push(r.categoryId);
+      }
+      catSums[r.categoryId] += amt;
+      dateSums[r.date] = (dateSums[r.date] || 0) + amt;
+    });
+
+    // 分类信息查找表（指向已删除/未知分类时用兜底信息展示）
+    var catMap = {};
+    data.categories.forEach(function (c) {
+      catMap[c.id] = c;
+    });
+
+    var byCategory = catOrder.map(function (cid) {
+      var c = catMap[cid] || FALLBACK_CATEGORY;
+      return {
+        id: cid,
+        name: c.name,
+        icon: c.icon,
+        color: c.color,
+        total: round2(catSums[cid])
+      };
+    }).sort(function (a, b) {
+      return b.total - a.total; // total 降序
+    });
+
+    // Object.keys 对 'YYYY-MM-DD' 的字典序即为时间升序
+    var daily = Object.keys(dateSums).sort().map(function (d) {
+      return { date: d, total: round2(dateSums[d]) };
+    });
+
+    return {
+      ym: month,
+      total: round2(total),
+      count: list.length,
+      byCategory: byCategory,
+      daily: daily
+    };
+  }
+
+  /**
+   * 某月预算使用状态
+   * @param {string=} ym 形如 '2026-10'，缺省时取当前月
+   * @returns {{budget:number|null, spent:number, remaining:number,
+   *            usedPct:number, level:'none'|'ok'|'warn'|'over'}}
+   *          level：未设预算 'none'；超支 'over'；已达 80% 'warn'；否则 'ok'
+   */
+  function getBudgetStatus(ym) {
+    var budget = getBudget();
+    var spent = getMonthSummary(ym).total;
+    if (budget === null) {
+      // 未设置预算：usedPct、remaining 固定为 0
+      return { budget: null, spent: spent, remaining: 0, usedPct: 0, level: 'none' };
+    }
+    return {
+      budget: budget,
+      spent: spent,
+      remaining: round2(budget - spent),          // 可为负
+      usedPct: Math.round(spent / budget * 100),  // 四舍五入取整百分比
+      level: spent >= budget ? 'over'
+        : (spent >= budget * 0.8 ? 'warn' : 'ok')
+    };
+  }
+
+  // ==================== 对外 API：导入导出 ====================
+
+  /**
+   * 导出完整备份（美化格式 JSON 字符串）
+   * @returns {string} { meta:{app,version,exportedAt}, records, categories, budgets }
+   */
+  function exportJSON() {
+    var data = getData();
+    return JSON.stringify({
+      meta: {
+        app: 'xiaozhangben',
+        version: 1,
+        exportedAt: new Date().toISOString() // 元信息用 ISO 时间，便于跨时区识别
+      },
+      records: data.records,
+      categories: data.categories,
+      budgets: data.budgets
+    }, null, 2);
+  }
+
+  /**
+   * 从 JSON 字符串导入并整体替换现有数据。
+   * 先完整校验、构造好新数据后再替换保存；任何异常都不会破坏现有数据。
+   * 元素缺字段时合理补全：record 补 id/createdAt/type（日期缺省补今天、
+   * categoryId 缺省补 'qita'、note 缺省补空串），category 补 icon/color/sort/custom。
+   * @param {string} text
+   * @returns {{ok:boolean, error?:string}} 失败时 error 固定为
+   *          '文件格式不正确或数据已损坏'，绝不抛异常
+   */
+  function importJSON(text) {
+    try {
+      var parsed = JSON.parse(text);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('根节点必须是对象');
+      }
+      if (!Array.isArray(parsed.records) || !Array.isArray(parsed.categories)) {
+        throw new Error('records/categories 必须是数组');
+      }
+      if (!parsed.budgets || typeof parsed.budgets !== 'object' || Array.isArray(parsed.budgets)) {
+        throw new Error('budgets 必须是对象');
+      }
+
+      var i, c, n;
+
+      // ---- 分类：先统计已有最大 sort，缺 sort 的依次顺延 ----
+      var maxSort = 0;
+      for (i = 0; i < parsed.categories.length; i++) {
+        c = parsed.categories[i];
+        if (!c || typeof c !== 'object' || Array.isArray(c)) {
+          throw new Error('分类元素非法');
+        }
+        n = Number(c.sort);
+        if (isFinite(n) && n > 0 && n > maxSort) {
+          maxSort = n;
+        }
+      }
+      var nextSort = maxSort;
+      var catSeen = {};
+      var categories = [];
+      for (i = 0; i < parsed.categories.length; i++) {
+        c = parsed.categories[i];
+        var name = (typeof c.name === 'string') ? c.name.trim() : '';
+        if (!name) {
+          throw new Error('分类缺少有效名称');
+        }
+        n = Number(c.sort);
+        var sort;
+        if (isFinite(n) && n > 0) {
+          sort = n;
+        } else {
+          nextSort += 1; // 缺 sort：顺延补全
+          sort = nextSort;
+        }
+        var icon = (typeof c.icon === 'string' && c.icon.trim()) ? c.icon.trim() : '🏷️';
+        var color = (typeof c.color === 'string' && COLOR_RE.test(c.color.trim()))
+          ? c.color.trim() : paletteColor(sort);
+        var cid = (typeof c.id === 'string' && c.id && !catSeen[c.id])
+          ? c.id : makeUniqueId('c', catSeen, i);
+        catSeen[cid] = true; // 外部提供的 id 也要登记，防止后续重复
+        categories.push({
+          id: cid,
+          name: name,
+          icon: icon,
+          color: color,
+          custom: (typeof c.custom === 'boolean') ? c.custom : true, // 缺省视为自定义分类
+          sort: sort
+        });
+      }
+
+      // ---- 记录 ----
+      var recSeen = {};
+      var records = [];
+      for (i = 0; i < parsed.records.length; i++) {
+        var r = parsed.records[i];
+        if (!r || typeof r !== 'object' || Array.isArray(r)) {
+          throw new Error('记录元素非法');
+        }
+        var amount = round2(Number(r.amount));
+        if (!isFinite(amount) || amount <= 0) {
+          throw new Error('记录金额非法'); // 金额无法凭空补全，视为数据损坏
+        }
+        var date;
+        if (normalizeDateStr(r.date)) {
+          date = normalizeDateStr(r.date);
+        } else if (r.date === null || r.date === undefined || r.date === '') {
+          date = todayStr(); // 缺日期：补今天
+        } else {
+          throw new Error('记录日期非法');
+        }
+        var createdAt = Number(r.createdAt);
+        var rid = (typeof r.id === 'string' && r.id && !recSeen[r.id])
+          ? r.id : makeUniqueId('r', recSeen, i);
+        recSeen[rid] = true; // 外部提供的 id 也要登记，防止后续重复
+        records.push({
+          id: rid,
+          type: (typeof r.type === 'string' && r.type) ? r.type : 'expense',
+          amount: amount,
+          categoryId: normalizeCategoryId(r.categoryId),
+          date: date,
+          note: normalizeNote(r.note),
+          createdAt: isFinite(createdAt) ? createdAt : Date.now()
+        });
+      }
+
+      // ---- 预算 ----
+      var monthly = null;
+      var mb = parsed.budgets.monthly;
+      if (mb !== null && mb !== undefined) {
+        var bn = Number(mb);
+        if (!isFinite(bn) || bn <= 0) {
+          throw new Error('预算数值非法');
+        }
+        monthly = round2(bn);
+      }
+
+      // ---- 校验全部通过，才整体替换并保存 ----
+      _data = { records: records, categories: categories, budgets: { monthly: monthly } };
+      persist();
+      return { ok: true };
+    } catch (e) {
+      console.warn('[core.js] 导入失败：', e && e.message ? e.message : e);
+      return { ok: false, error: '文件格式不正确或数据已损坏' };
+    }
+  }
+
+  /**
+   * 导出某月账单 CSV（带 BOM，Excel 打开中文不乱码）
+   * @param {string=} ym 形如 '2026-10'，缺省时取当前月
+   * @returns {string} 首字符为 '\uFEFF'，表头：日期,分类,金额,备注
+   */
+  function exportCSV(ym) {
+    var month = ym || currentYm();
+    var data = getData();
+
+    // 分类 id -> 名称 查找表
+    var catMap = {};
+    data.categories.forEach(function (c) {
+      catMap[c.id] = c;
+    });
+
+    var lines = ['\uFEFF日期,分类,金额,备注'];
+    getMonthRecords(month).forEach(function (r) {
+      var cat = catMap[r.categoryId];
+      var catName = cat ? cat.name : FALLBACK_CATEGORY.name;
+      lines.push(
+        csvField(r.date) + ',' +
+        csvField(catName) + ',' +
+        formatAmount(r.amount) + ',' +
+        csvField(r.note)
+      );
+    });
+    return lines.join('\r\n');
+  }
+
+  /**
+   * CSV 字段转义：含逗号/双引号/换行时用双引号包裹，内部双引号翻倍
+   * @param {*} v
+   * @returns {string}
+   */
+  function csvField(v) {
+    var s = (v === null || v === undefined) ? '' : String(v);
+    if (/[",\r\n]/.test(s)) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  }
+
+  // ==================== 对外 API：格式化与日期工具 ====================
+
+  /**
+   * 金额格式化为两位小数字符串
+   * @param {*} n
+   * @returns {string} 如 '25.50'；非法输入兜底为 '0.00'
+   */
+  function formatAmount(n) {
+    var num = Number(n);
+    if (!isFinite(num)) {
+      num = 0;
+    }
+    return num.toFixed(2);
+  }
+
+  /**
+   * 本地时区今天，'YYYY-MM-DD'（手动拼接，避免 UTC 偏移）
+   * @returns {string}
+   */
+  function todayStr() {
+    return dateToStr(new Date());
+  }
+
+  /**
+   * 从日期字符串取年月
+   * @param {string|Date} dateStr '2026-10-01'（或 Date 对象）
+   * @returns {string} '2026-10'；无法识别时返回空串
+   */
+  function ymOf(dateStr) {
+    if (dateStr instanceof Date && !isNaN(dateStr.getTime())) {
+      return dateStr.getFullYear() + '-' + pad2(dateStr.getMonth() + 1);
+    }
+    return String(dateStr === null || dateStr === undefined ? '' : dateStr).slice(0, 7);
+  }
+
+  /**
+   * 当前年月，'2026-10'
+   * @returns {string}
+   */
+  function currentYm() {
+    return todayStr().slice(0, 7);
+  }
+
+  // ==================== 导出全局对象 ====================
+
+  return {
+    // 加载与保存
+    load: load,
+    save: save,
+    // 多账户数据隔离
+    setUser: setUser,
+    storageUser: storageUser,
+    // 账单记录
+    getRecords: getRecords,
+    getMonthRecords: getMonthRecords,
+    getRecord: getRecord,
+    addRecord: addRecord,
+    updateRecord: updateRecord,
+    deleteRecord: deleteRecord,
+    // 分类
+    getCategories: getCategories,
+    addCategory: addCategory,
+    updateCategory: updateCategory,
+    deleteCategory: deleteCategory,
+    // 预算
+    getBudget: getBudget,
+    setBudget: setBudget,
+    // 统计
+    getMonthSummary: getMonthSummary,
+    getBudgetStatus: getBudgetStatus,
+    // 导入导出
+    exportJSON: exportJSON,
+    importJSON: importJSON,
+    exportCSV: exportCSV,
+    // 工具
+    formatAmount: formatAmount,
+    todayStr: todayStr,
+    ymOf: ymOf,
+    currentYm: currentYm
+  };
+})();

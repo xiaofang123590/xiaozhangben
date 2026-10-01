@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>小账本 · 本地记账</title>
+<meta name="theme-color" content="#00B578">
+<!-- PWA / iPhone 添加到主屏幕 -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="小账本">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- 登录/注册界面（未登录时显示，由 app.js 控制） -->
+<div id="auth-screen" class="hidden">
+  <div class="auth-card">
+    <div class="auth-logo">📒</div>
+    <h1 class="auth-title">小账本</h1>
+    <p class="auth-sub">本地记账 · 多账户各自独立</p>
+    <div class="auth-tabs">
+      <button type="button" id="auth-tab-login" class="auth-tab active">登录</button>
+      <button type="button" id="auth-tab-register" class="auth-tab">注册</button>
+    </div>
+    <div class="form-row"><label class="form-label">用户名</label><input id="auth-username" type="text" maxlength="20" placeholder="2~20 位中文/字母/数字" autocomplete="username"></div>
+    <div class="form-row"><label class="form-label">密码</label><input id="auth-password" type="password" maxlength="32" placeholder="至少 4 位" autocomplete="current-password"></div>
+    <div class="form-row hidden" id="auth-password2-row"><label class="form-label">确认密码</label><input id="auth-password2" type="password" maxlength="32" placeholder="再输一遍" autocomplete="new-password"></div>
+    <button id="auth-submit-btn" class="btn-primary auth-submit">登 录</button>
+    <p class="hint auth-hint">账号仅保存在本机浏览器，用于多人共用设备时账本互相隔离，不能跨设备同步。</p>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+
+  <!-- 预算提醒横幅（JS 控制：warn 黄色 / over 红色） -->
+  <div id="budget-banner" class="banner hidden"></div>
+
+  <header id="app-header">
+    <h1 id="page-title">记账</h1>
+    <div id="month-nav" class="hidden">
+      <button id="month-prev" class="month-btn" aria-label="上个月">‹</button>
+      <span id="month-label">2026年10月</span>
+      <button id="month-next" class="month-btn" aria-label="下个月">›</button>
+    </div>
+  </header>
+
+  <main id="app-main">
+
+    <!-- ============ 记账页 ============ -->
+    <section id="view-record" class="view">
+      <div class="card" id="quick-add-card">
+        <div class="quick-amount-row">
+          <span class="currency">¥</span>
+          <input id="quick-amount" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off">
+          <button id="quick-save-btn" class="btn-primary">记一笔</button>
+        </div>
+        <div id="quick-categories" class="category-grid"></div>
+        <div class="quick-meta-row">
+          <input id="quick-date" type="date">
+          <input id="quick-note" type="text" placeholder="备注（可选）" maxlength="30" autocomplete="off">
+        </div>
+      </div>
+      <div id="record-list"></div>
+      <div id="record-empty" class="empty-tip hidden">这个月还没有记录，先记一笔吧 ~</div>
+    </section>
+
+    <!-- ============ 统计页 ============ -->
+    <section id="view-stats" class="view hidden">
+      <div class="card" id="stat-summary"></div>
+      <div class="card">
+        <h3 class="card-title">分类占比</h3>
+        <div class="chart-box"><canvas id="pie-chart"></canvas></div>
+        <div id="pie-empty" class="empty-tip hidden">本月暂无支出数据</div>
+      </div>
+      <div class="card">
+        <h3 class="card-title">每日趋势</h3>
+        <div class="chart-box"><canvas id="trend-chart"></canvas></div>
+        <div id="trend-empty" class="empty-tip hidden">本月暂无支出数据</div>
+      </div>
+    </section>
+
+    <!-- ============ 预算页 ============ -->
+    <section id="view-budget" class="view hidden">
+      <div class="card">
+        <h3 class="card-title">本月预算</h3>
+        <div class="budget-input-row">
+          <span class="currency">¥</span>
+          <input id="budget-input" type="number" inputmode="decimal" min="0" step="0.01" placeholder="设置每月预算" autocomplete="off">
+          <button id="budget-save-btn" class="btn-primary">保存</button>
+        </div>
+        <div id="budget-progress-box" class="hidden">
+          <div class="progress-track"><div id="budget-progress-bar"></div></div>
+          <div id="budget-stats"></div>
+        </div>
+        <p class="hint">提示：已用达 80% 时黄色提醒，超支时红色警示（打开页面时显示）。</p>
+      </div>
+      <div class="card">
+        <h3 class="card-title">本月支出构成</h3>
+        <div id="budget-category-list"></div>
+        <div id="budget-cat-empty" class="empty-tip hidden">本月暂无支出数据</div>
+      </div>
+    </section>
+
+    <!-- ============ 管理页 ============ -->
+    <section id="view-manage" class="view hidden">
+      <div class="card">
+        <h3 class="card-title">账户</h3>
+        <div class="account-row"><span class="account-label">当前用户</span><b id="account-name">未登录</b></div>
+        <div class="btn-col">
+          <button id="change-pw-btn" class="btn-secondary">🔑 修改密码</button>
+          <button id="logout-btn" class="btn-secondary">🚪 退出登录</button>
+        </div>
+        <p class="hint">退出后账本数据仍保留在本机，重新登录即可查看。</p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h3 class="card-title">分类管理</h3>
+          <button id="add-category-btn" class="btn-secondary btn-sm">+ 新增分类</button>
+        </div>
+        <div id="category-manage-list"></div>
+      </div>
+      <div class="card">
+        <h3 class="card-title">数据备份</h3>
+        <div class="btn-col">
+          <button id="export-csv-btn" class="btn-secondary">📄 导出本月账单（CSV，Excel 可打开）</button>
+          <button id="export-json-btn" class="btn-secondary">💾 导出完整备份（JSON）</button>
+          <button id="import-json-btn" class="btn-secondary">♻️ 从备份恢复（JSON）</button>
+        </div>
+        <input id="import-file-input" type="file" accept=".json,application/json" class="hidden">
+        <p class="hint">数据仅保存在本机浏览器中，清除浏览器数据前请先导出备份。</p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 底部导航 -->
+  <nav id="tab-bar">
+    <button class="tab active" data-view="record"><span class="tab-icon">📝</span><span class="tab-label">记账</span></button>
+    <button class="tab" data-view="stats"><span class="tab-icon">📊</span><span class="tab-label">统计</span></button>
+    <button class="tab" data-view="budget"><span class="tab-icon">🎯</span><span class="tab-label">预算</span></button>
+    <button class="tab" data-view="manage"><span class="tab-icon">⚙️</span><span class="tab-label">管理</span></button>
+  </nav>
+</div>
+
+<!-- 记录编辑弹窗 -->
+<div id="modal-record" class="modal hidden">
+  <div class="modal-mask" data-close="1"></div>
+  <div class="modal-body">
+    <h3 class="modal-title">编辑记录</h3>
+    <div class="form-row"><label class="form-label">金额</label><input id="edit-amount" type="text" inputmode="decimal" autocomplete="off"></div>
+    <div class="form-row"><label class="form-label">分类</label><div id="edit-categories" class="category-grid"></div></div>
+    <div class="form-row"><label class="form-label">日期</label><input id="edit-date" type="date"></div>
+    <div class="form-row"><label class="form-label">备注</label><input id="edit-note" type="text" maxlength="30" autocomplete="off"></div>
+    <div class="modal-actions">
+      <button id="edit-delete-btn" class="btn-danger">删除</button>
+      <span class="modal-actions-right">
+        <button id="edit-cancel-btn" class="btn-secondary">取消</button>
+        <button id="edit-save-btn" class="btn-primary">保存</button>
+      </span>
+    </div>
+  </div>
+</div>
+
+<!-- 分类新增/编辑弹窗 -->
+<div id="modal-category" class="modal hidden">
+  <div class="modal-mask" data-close="1"></div>
+  <div class="modal-body">
+    <h3 class="modal-title" id="modal-category-title">新增分类</h3>
+    <div class="form-row"><label class="form-label">名称</label><input id="category-name-input" type="text" maxlength="6" placeholder="如 宠物" autocomplete="off"></div>
+    <div class="form-row"><label class="form-label">图标</label><input id="category-icon-input" type="text" maxlength="4" placeholder="一个 emoji，如 🐱" autocomplete="off"></div>
+    <div class="modal-actions">
+      <span class="modal-actions-right">
+        <button id="category-cancel-btn" class="btn-secondary">取消</button>
+        <button id="category-save-btn" class="btn-primary">保存</button>
+      </span>
+    </div>
+  </div>
+</div>
+
+<!-- 修改密码弹窗 -->
+<div id="modal-password" class="modal hidden">
+  <div class="modal-mask" data-close="1"></div>
+  <div class="modal-body">
+    <h3 class="modal-title">修改密码</h3>
+    <div class="form-row"><label class="form-label">旧密码</label><input id="pw-old" type="password" maxlength="32" autocomplete="current-password"></div>
+    <div class="form-row"><label class="form-label">新密码</label><input id="pw-new" type="password" maxlength="32" placeholder="至少 4 位" autocomplete="new-password"></div>
+    <div class="form-row"><label class="form-label">确认新密码</label><input id="pw-new2" type="password" maxlength="32" autocomplete="new-password"></div>
+    <div class="modal-actions">
+      <span class="modal-actions-right">
+        <button id="pw-cancel-btn" class="btn-secondary">取消</button>
+        <button id="pw-save-btn" class="btn-primary">保存</button>
+      </span>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="hidden"></div>
+
+<script src="js/chart.umd.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/core.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
