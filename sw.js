@@ -5,7 +5,7 @@
  * 注意：以后更新了 css/js/图标 内容，请把 CACHE_VERSION 号 +1，否则手机上
  *       可能一直读到旧缓存。
  */
-var CACHE_VERSION = 'xzb-v6';
+var CACHE_VERSION = 'xzb-v7';
 
 var PRECACHE = [
   './',

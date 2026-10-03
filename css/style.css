@@ -1,27 +1,46 @@
 /* ======================================================================
    小账本 · 本地记账 —— 全站样式（纯手写 CSS，无任何框架）
-   手机优先（375px 基准），桌面端 #app 最大 480px 水平居中
-   主题色：薄荷绿 #00B578    主文字 #333    辅助文字 #888 / #999
+   布局：App Shell（整页不滚动；顶栏常驻 / #app-main 独立滚动 / 底栏常驻）
+   手机优先（375px 基准），桌面端锁 480px 居中 + 主题色氛围底
+   主题系统：明暗 data-mode（light/dark，auto 由 JS 解析）× 风格 data-accent
+   （第 37 节色板），全部组件只引用下方语义变量。
    ====================================================================== */
 
 /* ----------------------------------------------------------------------
-   1. 设计变量
+   1. 设计变量（浅色 · 薄荷绿为默认风格）
    ---------------------------------------------------------------------- */
 :root {
+  /* —— 品牌主色族（其他风格见第 37 节 data-accent 色板）—— */
   --primary:        #00B578;   /* 主题薄荷绿 */
   --primary-dark:   #00A06C;   /* hover / active */
   --primary-deep:   #008F5F;   /* 深一档，用于浅底上的文字 */
   --primary-light:  #E8F8F1;   /* 选中浅绿背景 */
   --primary-border: #BFE6D4;   /* 浅绿描边 */
   --primary-glow:   rgba(0, 181, 120, 0.14); /* focus 光晕 */
+  --primary-bright: #00C98A;   /* 渐变亮端：按钮 / 装饰共用 */
+  --primary-rgb:    0, 181, 120; /* 供 rgba(var(--primary-rgb), α) 生成主题色透明变体 */
+  --on-primary:     #FFFFFF;   /* 主色按钮上的文字（墨玉金风格换深色） */
 
   --text-main:  #333333;
   --text-sub:   #666666;
   --text-grey:  #999999;
   --text-faint: #A9B2AC;
+  --title-color: #223528;      /* 页面大标题（深色模式换浅色） */
 
   --line:     #F0F2F0;         /* 分割线 */
   --bg-input: #F6F8F6;         /* 输入框浅底 */
+  --focus-bg: #FFFFFF;         /* 输入类 focus 底色（深色换微亮底） */
+  --placeholder: #B9C3BC;
+  --empty-text: #6F7D75;       /* 空状态文字（比 text-grey 再深一档保证对比度） */
+  --divider-soft: #E4ECE7;     /* 流水行两端渐隐分割线的中段色 */
+
+  --surface:      #FFFFFF;     /* 主表面：卡片 / 弹窗面板 / 登录卡等 */
+  --surface-2:    #F4F7F4;     /* 次级表面：流水 / 分类图标底 */
+  --surface-soft: #F5F9F6;     /* 行级 hover / active 底色 */
+  --track:        #EDF1ED;     /* 进度条 / 对比条浅灰轨道 */
+  --card-border:  #EDF2EE;     /* 卡片 1px 描边（浅色内高光） */
+  --tabbar-bg:    rgba(255, 255, 255, 0.94);
+  --tabbar-line:  #ECF0EC;
 
   --danger:      #FA5151;
   --danger-deep: #E64340;
@@ -35,10 +54,15 @@
   --amount: #FF6B3B;           /* 流水金额：橙红 */
 
   --radius-card: 16px;
-  --primary-bright: #00C98A;   /* 渐变亮端：按钮 / 装饰共用 */
-  --shadow-card:  0 2px 14px rgba(0, 150, 100, 0.09);    /* 更柔 + 主题色相 */
-  --shadow-float: 0 12px 30px rgba(0, 150, 100, 0.15);
-  --tabbar-h: 58px;            /* 底部导航估算高度（不含安全区） */
+  --shadow-card:  0 2px 14px rgba(var(--primary-rgb), 0.09);   /* 柔和 + 主题色相 */
+  --shadow-float: 0 12px 30px rgba(var(--primary-rgb), 0.15);
+  --shadow-modal: 0 -8px 30px rgba(0, 0, 0, 0.12);
+  --shadow-tabbar: 0 -4px 16px rgba(var(--primary-rgb), 0.06);
+  --mask-bg:      rgba(17, 24, 20, 0.5);
+  --tabbar-h: 58px;            /* 底部导航估算高度（不含安全区），Toast 定位用 */
+
+  /* App Shell 的画布底色：柔和主题色渐变 */
+  --bg-page: linear-gradient(180deg, #DFF4E9 0%, #F2FAF5 45%, #FDFEFD 100%);
 }
 
 /* ----------------------------------------------------------------------
@@ -50,6 +74,9 @@
 
 html { -webkit-text-size-adjust: 100%; }
 
+html,
+body { height: 100%; }
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC",
                "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI",
@@ -57,9 +84,12 @@ body {
   font-size: 15px;
   color: var(--text-main);
   line-height: 1.5;
-  /* 柔和浅色渐变：淡绿 -> 淡白 */
-  background: linear-gradient(180deg, #DFF4E9 0%, #F2FAF5 45%, #FDFEFD 100%) fixed;
-  min-height: 100vh;
+  /* App Shell 之外的氛围底：主题色双向柔光（手机端被 #app 完全覆盖，桌面可见） */
+  background:
+    radial-gradient(900px 620px at 12% -8%, rgba(var(--primary-rgb), 0.16), transparent 62%),
+    radial-gradient(820px 620px at 92% 108%, rgba(var(--primary-rgb), 0.11), transparent 60%),
+    #EDF3EF;
+  overflow: hidden;              /* 整页不滚动，滚动交给 #app-main */
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
@@ -88,10 +118,24 @@ input:focus-visible {
    3. 应用骨架：#app / 顶栏 / 主内容
    ---------------------------------------------------------------------- */
 #app {
+  height: 100vh;
+  height: 100dvh;                /* 移动端地址栏收展时动态贴合可视高度 */
   max-width: 480px;
   margin: 0 auto;
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;        /* App Shell：顶栏常驻 / 内容滚动 / 底栏常驻 */
+  background: var(--bg-page);
   position: relative;
+}
+
+/* 桌面端：App 壳两侧描边 + 主题色光晕投影，窗口怎么拉布局都不变形 */
+@media (min-width: 768px) {
+  #app {
+    border-left: 1px solid var(--card-border);
+    border-right: 1px solid var(--card-border);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35),
+                0 24px 90px rgba(var(--primary-rgb), 0.16);
+  }
 }
 
 #app-header {
@@ -105,7 +149,7 @@ input:focus-visible {
 #page-title {
   font-size: 24px;
   font-weight: 800;             /* 品牌感大标题（下划线装饰见 34.1） */
-  color: #223528;
+  color: var(--title-color);
   letter-spacing: 1.5px;
 }
 
@@ -122,10 +166,10 @@ input:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #FFFFFF;
-  border: 1px solid #E2EAE4;
+  background: var(--surface);
+  border: 1px solid var(--card-border);
   border-radius: 50%;
-  color: #666666;
+  color: var(--text-sub);
   font-size: 18px;
   line-height: 1;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
@@ -147,11 +191,17 @@ input:focus-visible {
 
 /* 主内容区：底部为固定 TabBar + 安全区预留空间，避免内容被遮挡 */
 #app-main {
-  padding: 6px 16px calc(var(--tabbar-h) + 30px + env(safe-area-inset-bottom, 0px));
+  flex: 1 1 auto;
+  overflow-y: auto;              /* 唯一滚动容器：顶栏/底栏因此天然固定 */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;  /* 滚到边界不牵动整页，也不触发下拉刷新 */
+  padding: 6px 16px 28px;
 }
 
-/* 页面切换时的轻过渡（.hidden 移除后动画自动播放） */
+/* 页面切换时的轻过渡（方向感变体见 34.2a；.hidden 移除后动画自动播放） */
 .view { animation: viewIn 0.22s ease both; }
+.view.view-fwd  { animation-name: viewInFwd; }
+.view.view-back { animation-name: viewInBack; }
 
 /* ----------------------------------------------------------------------
    4. 通用组件：卡片 / 按钮 / 输入框 / 提示
@@ -159,7 +209,8 @@ input:focus-visible {
 
 /* ---- 卡片 ---- */
 .card {
-  background: #FFFFFF;
+  background: var(--surface);
+  border: 1px solid var(--card-border);   /* 1px 内高光，深色下成为轮廓 */
   border-radius: var(--radius-card);
   padding: 16px;
   box-shadow: var(--shadow-card);
@@ -207,8 +258,8 @@ input:focus-visible {
 /* 实心主色白字（微渐变 + 按压反馈见上方共用的 scale(0.97)） */
 .btn-primary {
   background: linear-gradient(135deg, var(--primary) 0%, var(--primary-bright) 100%);
-  color: #FFFFFF;
-  box-shadow: 0 3px 10px rgba(0, 181, 120, 0.30);
+  color: var(--on-primary);
+  box-shadow: 0 3px 10px rgba(var(--primary-rgb), 0.30);
 }
 .btn-primary:active { background: var(--primary-dark); }
 
@@ -248,7 +299,7 @@ input:focus-visible {
   background: transparent;
   transition: background 0.15s;
 }
-.btn-icon:active { background: #F1F4F1; }
+.btn-icon:active { background: var(--surface-soft); }
 
 /* 纵向按钮组（数据备份） */
 .btn-col {
@@ -271,7 +322,7 @@ input[type="number"] {
   border: 1.5px solid transparent;
   border-radius: 10px;
   padding: 10px 12px;
-  font-size: 15px;
+  font-size: 16px;              /* ≥16px 防止 iOS 聚焦时自动放大页面 */
   color: var(--text-main);
   font-family: inherit;
   outline: none;
@@ -281,10 +332,10 @@ input[type="text"]:focus,
 input[type="date"]:focus,
 input[type="number"]:focus {
   border-color: var(--primary);
-  background: #FFFFFF;
+  background: var(--focus-bg);
   box-shadow: 0 0 0 3px var(--primary-glow);
 }
-input::placeholder { color: #B9C3BC; }
+input::placeholder { color: var(--placeholder); }
 
 input[type="date"] {
   -webkit-appearance: none;
@@ -306,11 +357,11 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 /* ---- 空状态 / 小提示 ---- */
 .empty-tip {
   text-align: center;
-  color: #6F7D75;               /* 加深一档，保证浅底上的可读对比度 */
+  color: var(--empty-text);
   font-size: 15px;
   line-height: 1.8;
   padding: 44px 20px;           /* 上下留白加大，emoji 更醒目 */
-  background: linear-gradient(180deg, rgba(0, 181, 120, 0.05), rgba(0, 181, 120, 0.02));
+  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.05), rgba(var(--primary-rgb), 0.02));
   border-radius: 14px;
 }
 
@@ -362,7 +413,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .quick-amount-row:focus-within,
 .budget-input-row:focus-within {
   border-color: var(--primary);
-  background: #FFFFFF;
+  background: var(--focus-bg);
   box-shadow: 0 0 0 3px var(--primary-glow);
 }
 
@@ -386,7 +437,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   background: transparent;
   box-shadow: none;
 }
-#quick-amount::placeholder { color: #C2CBC5; font-weight: 700; }
+#quick-amount::placeholder { color: var(--placeholder); font-weight: 700; }
 
 #quick-save-btn { flex-shrink: 0; padding: 10px 18px; }
 
@@ -425,8 +476,8 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   align-items: center;
   gap: 4px;
   padding: 9px 2px;
-  background: #FFFFFF;                      /* 未选中：白底 */
-  border: 1.5px solid #EDF0ED;
+  background: var(--surface);               /* 未选中：表面色 */
+  border: 1.5px solid var(--card-border);
   border-radius: 12px;
   transition: border-color 0.15s, background 0.15s, transform 0.12s;
 }
@@ -435,9 +486,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .cat-icon {
   font-size: 20px;
   line-height: 1.2;
-  padding: 4px 8px;             /* 浅色圆角小底 + 微渐变（深色见 34.11） */
+  padding: 4px 8px;             /* 浅色圆角小底 + 微渐变（随主题色换色） */
   border-radius: 10px;
-  background: linear-gradient(180deg, rgba(0, 181, 120, 0.10), rgba(0, 181, 120, 0.04));
+  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.10), rgba(var(--primary-rgb), 0.04));
 }
 
 .cat-name {
@@ -473,7 +524,8 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 #record-list { margin-bottom: 4px; }
 
 .day-group {
-  background: #FFFFFF;
+  background: var(--surface);
+  border: 1px solid var(--card-border);
   border-radius: var(--radius-card);
   padding: 4px 14px 6px;
   box-shadow: var(--shadow-card);
@@ -509,12 +561,12 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   cursor: pointer;
   transition: background 0.18s ease;   /* 按压反馈：背景色过渡 */
 }
-/* 分割线：两端渐隐的浅色线（border-image 实现，深色覆盖见 34.11/34.12） */
+/* 分割线：两端渐隐的浅色线（border-image 实现，中段色随主题切换） */
 .record-item + .record-item {
   border-top: 1px solid transparent;
-  border-image: linear-gradient(90deg, rgba(0, 181, 120, 0) 0%, #E4ECE7 16%, #E4ECE7 84%, rgba(0, 181, 120, 0) 100%) 1;
+  border-image: linear-gradient(90deg, rgba(var(--primary-rgb), 0) 0%, var(--divider-soft) 16%, var(--divider-soft) 84%, rgba(var(--primary-rgb), 0) 100%) 1;
 }
-.record-item:active { background: #F5F9F6; }
+.record-item:active { background: var(--surface-soft); }
 
 .record-icon {
   width: 40px;
@@ -524,7 +576,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   align-items: center;
   justify-content: center;
   font-size: 20px;
-  background: linear-gradient(180deg, #F7FAF8, #EDF3EF);   /* 微渐变图标底 */
+  background: linear-gradient(180deg, var(--focus-bg), var(--surface-2));   /* 微渐变图标底 */
   border-radius: 12px;
 }
 
@@ -593,14 +645,14 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   font-variant-numeric: tabular-nums;
 }
 
-/* Chart.js 容器：必须给确定高度；内衬淡主题色圆角底（深色见 34.11） */
+/* Chart.js 容器：必须给确定高度；内衬淡主题色圆角底（随主题换色） */
 .chart-box {
   position: relative;
   width: 100%;
   height: 260px;
   padding: 12px;
   border-radius: 14px;
-  background: linear-gradient(180deg, rgba(0, 181, 120, 0.055), rgba(0, 181, 120, 0.015));
+  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.055), rgba(var(--primary-rgb), 0.015));
 }
 /* 对应 empty-tip 可见时（无数据），隐藏空画布：渐进增强 */
 .card:has(> .empty-tip:not(.hidden)) .chart-box { display: none; }
@@ -630,16 +682,16 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 /* 进度条轨道 */
 .progress-track {
   height: 12px;
-  background: #EDF1ED;
+  background: var(--track);
   border-radius: 999px;
   overflow: hidden;
 }
 
-/* 进度条：默认/健康 = 主题绿；JS 会追加 .progress-warn / .progress-over */
+/* 进度条：默认/健康 = 主题色；JS 会追加 .progress-warn / .progress-over */
 #budget-progress-bar {
   height: 100%;
   width: 0;                                 /* 宽度由 JS 内联写入 */
-  background: linear-gradient(90deg, #00C97E, var(--primary));
+  background: linear-gradient(90deg, var(--primary-bright), var(--primary));
   border-radius: 999px;
   transition: width 0.45s cubic-bezier(0.25, 0.8, 0.35, 1), background 0.3s;
 }
@@ -694,7 +746,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   flex: 1;
   min-width: 0;
   height: 10px;
-  background: #EEF1EE;                      /* 浅灰圆角轨道 */
+  background: var(--track);                 /* 浅灰圆角轨道，随主题切换 */
   border-radius: 999px;
   overflow: hidden;
 }
@@ -731,7 +783,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   align-items: center;
   justify-content: center;
   font-size: 18px;
-  background: linear-gradient(180deg, #F7FAF8, #EDF3EF);   /* 微渐变图标底 */
+  background: linear-gradient(180deg, var(--focus-bg), var(--surface-2));   /* 微渐变图标底 */
   border-radius: 10px;
 }
 .mcat-name {
@@ -752,22 +804,18 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 }
 
 /* ----------------------------------------------------------------------
-   12. 底部导航 TabBar（固定视口底部，随 #app 居中）
+   12. 底部导航 TabBar（App Shell 常驻底栏：普通文档流，天然固定不滚动）
    ---------------------------------------------------------------------- */
 #tab-bar {
-  position: fixed;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 100%;
-  max-width: 480px;
+  position: relative;
+  flex-shrink: 0;
   display: flex;
   align-items: stretch;
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--tabbar-bg);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
-  border-top: 1px solid #ECF0EC;
-  box-shadow: 0 -4px 16px rgba(38, 102, 74, 0.06);
+  border-top: 1px solid var(--tabbar-line);
+  box-shadow: var(--shadow-tabbar);
   padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
   z-index: 50;
 }
@@ -825,7 +873,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .modal-mask {
   position: absolute;
   inset: 0;
-  background: rgba(17, 24, 20, 0.5);
+  background: var(--mask-bg);
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
   animation: fadeIn 0.22s ease both;
@@ -842,7 +890,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   background: #FFFFFF;
   border-radius: 20px 20px 0 0;
   padding: 22px 20px calc(24px + env(safe-area-inset-bottom, 0px));
-  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-modal);
   animation: slideUp 0.3s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
@@ -928,6 +976,23 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* 页面切换方向感：沿 Tab 顺序前进 / 后退（类名由 JS 按页签顺序写入） */
+@keyframes viewInFwd {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes viewInBack {
+  from { opacity: 0; transform: translateX(-16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* 底栏激活图标弹性放大 */
+@keyframes tabPop {
+  0%   { transform: scale(0.8); }
+  55%  { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
 /* ----------------------------------------------------------------------
    16. 桌面端增强（悬浮感 + hover 反馈）
    ---------------------------------------------------------------------- */
@@ -938,14 +1003,14 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
     box-shadow: var(--shadow-float);
   }
 
-  .btn-primary:hover   { background: linear-gradient(135deg, var(--primary-dark), #00BC82); }
+  .btn-primary:hover   { background: linear-gradient(135deg, var(--primary-dark), var(--primary-bright)); }
   .btn-secondary:hover {
     border-color: var(--primary);
     background: var(--primary-light);       /* hover 填充浅绿 */
     color: var(--primary-deep);
   }
   .btn-danger:hover    { background: var(--danger-deep); }
-  .btn-icon:hover      { background: #F1F5F1; }
+  .btn-icon:hover      { background: var(--surface-soft); }
 
   .month-btn:hover {
     color: var(--primary-deep);
@@ -1008,8 +1073,8 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   height: 64px;
   margin: 0 auto 10px;
   border-radius: 20px;
-  background: linear-gradient(135deg, var(--primary) 0%, #33C99A 100%);
-  box-shadow: 0 6px 18px rgba(0, 181, 120, 0.35);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-bright) 100%);
+  box-shadow: 0 6px 18px rgba(var(--primary-rgb), 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1049,7 +1114,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 }
 
 .auth-tab.active {
-  background: #fff;
+  background: var(--surface);
   color: var(--primary-deep);
   font-weight: 600;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
@@ -1078,7 +1143,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   border-radius: 10px;
   background: var(--bg-input);
   padding: 0 12px;
-  font-size: 15px;
+  font-size: 16px;              /* ≥16px 防止 iOS 聚焦时自动放大页面 */
   color: var(--text-main);
   outline: none;
   transition: all 0.2s ease;
@@ -1086,7 +1151,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 
 .auth-card .form-row input:focus {
   border-color: var(--primary);
-  background: #fff;
+  background: var(--focus-bg);
   box-shadow: 0 0 0 3px var(--primary-glow);
 }
 
@@ -2344,3 +2409,25 @@ body[data-theme="dark"] #shopping-text::placeholder { color: #64756D; }
 
 /* ---- 36.5 近 7 天热量：矮一档的图表容器 ---- */
 .chart-box-sm { height: 180px; }
+
+/* ---- 36.6 解析预览：标题行与关闭按钮 ---- */
+.nlp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.nlp-close {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--text-grey);
+  transition: color 0.15s, border-color 0.15s;
+}
+.nlp-close:active {
+  color: var(--danger);
+  border-color: var(--danger);
+}

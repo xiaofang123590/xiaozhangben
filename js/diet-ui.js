@@ -465,8 +465,9 @@ var DietUI = (function () {
     }
     var matched = 0;
     var kcalSum = 0;
-    var html = '<div class="nlp-preview"><div class="nlp-head">识别为「' +
-      Diet.mealName(nlpResult.meal) + '」</div>';
+    var html = '<div class="nlp-preview"><div class="nlp-head"><span>识别为「' +
+      Diet.mealName(nlpResult.meal) + '」</span>' +
+      '<button type="button" class="nlp-close" data-act="nlp-close" title="关闭并清空">✕ 关闭</button></div>';
     for (var i = 0; i < nlpResult.items.length; i++) {
       var it = nlpResult.items[i];
       if (it.matched) {
@@ -484,6 +485,13 @@ var DietUI = (function () {
     html += '<button type="button" id="nlp-add-btn" class="btn-primary btn-sm nlp-add-btn">全部添加到' +
       Diet.mealName(nlpResult.meal) + '（' + matched + ' 项 · ' + Math.round(kcalSum) + ' 千卡）</button></div>';
     box.innerHTML = html;
+  }
+
+  /** 关闭解析预览并清空输入框（重置） */
+  function closeNlpPreview() {
+    nlpResult = null;
+    $('diet-nlp-input').value = '';
+    $('diet-nlp-preview').innerHTML = '';
   }
 
   /** 把预览中全部已识别项写入当前浏览的日期 */
@@ -697,12 +705,13 @@ var DietUI = (function () {
   /* ==================== 事件绑定 ==================== */
 
   function bindOnce() {
-    // 日期切换（不允许看未来）
+    // 日期切换（不允许看未来）：切换后清掉解析预览，避免误加到别的日期
     $('diet-date').addEventListener('change', function () {
       var v = this.value;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) { this.value = date; return; }
       if (v > todayStr()) { toast('不能记录未来的日期'); this.value = date; return; }
       date = v;
+      closeNlpPreview();
       renderOverview();
       renderEntries();
       renderAdvice();
@@ -716,6 +725,7 @@ var DietUI = (function () {
     });
     $('diet-nlp-preview').addEventListener('click', function (e) {
       if (e.target.closest('#nlp-add-btn')) addAllNlp();
+      else if (e.target.closest('[data-act="nlp-close"]')) closeNlpPreview();
     });
 
     // 食物搜索（防抖）
