@@ -1,14 +1,17 @@
 /**
  * liquid-glass.js —— 底部导航「液态玻璃」交互层（iOS 26 风格）
  *
- * 一、滚动收缩 / 展开（全平台生效，纯类切换，形变交给 CSS 过渡）
- *   与 iOS 26 的滚动边缘效果一致：内容连续下滑超过阈值，底栏收窄变矮、隐去文字
- *   只留图标；上滑或回到顶部再展开。点按底栏（切换页面）时也会展开。
+ * 一、随手指滑动的连续形变（全平台生效）
+ *   形变量由滚动位置直接决定，与 iOS 大标题收起同一套模型——不是阈值开关：
+ *   下滑越过起点后，滚多少就收多少（收窄、变矮、文字淡出同步进行）；上滑即反向
+ *   展开，回到顶部完全归位。手指停住，玻璃就停在当前档位；指头一动立刻跟着变。
+ *   目标值每帧向自身靠拢一层（追帧平滑），带出液体的滞后与回弹感；最终以 CSS
+ *   变量 --mini(0~1) 写入底栏，样式表里各部件尺寸都是它的连续函数。
  *
  * 二、真折射（仅 Chromium：backdrop-filter 支持引用 SVG 滤镜）
  *   用 canvas 按底栏实际尺寸生成「边缘位移贴图」：把玻璃边缘建模成微凸曲面，
  *   R/G 通道编码 X/Y 位移（128 = 不动），经 feImage + feDisplacementMap 弯折玻璃
- *   背后的内容，边缘因此呈现真玻璃的折射。贴图以 100% 铺满滤镜区域，收缩动画中
+ *   背后的内容，边缘因此呈现真玻璃的折射。贴图以 100% 铺满滤镜区域，形变过程中
  *   由浏览器自动拉伸、不逐帧重建；尺寸收敛后（防抖 160ms）再按新尺寸重建保证清晰。
  *   其余内核（iOS 全系 / Firefox）检测不通过自动跳过，走 style.css 的毛玻璃 + 流光高光。
  */
@@ -18,56 +21,47 @@
   var bar = document.getElementById('tab-bar');
   if (!bar) return;
 
-  /* ==================== 一、滚动收缩 / 展开 ==================== */
+  /* ==================== 一、随手指的连续形变 ==================== */
 
-  (function initMinimize() {
+  (function initScrollMorph() {
     var main = document.getElementById('app-main');
     if (!main) return;
 
-    var MINI_AFTER = 46;    // 连续下滑累计超过此值 → 收缩
-    var EXPAND_AFTER = 18;  // 连续上滑累计超过此值 → 展开
-    var JUMP = 240;         // 单次跳变超过此值视为程序性定位（切页恢复滚动位置），忽略
-    var TOP_ZONE = 8;       // 滚动到顶部附近必展开
-    var suppressUntil = 0;  // 点按底栏后的静默截止时间戳
+    var START = 36;    // 滚动超过该位置开始收缩（顶部留一小段缓冲，完整展示）
+    var RANGE = 100;   // 再滚动这么多像素收缩到底
+    var EASE = 0.22;   // 每帧向目标靠拢的比例：越大越跟手，越小越「液」
+    var reduce = window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) EASE = 1;   // 减弱动态效果：去掉平滑，仍随滚动位置实时变化
 
-    var lastY = main.scrollTop;
-    var acc = 0;
-    var mini = false;
+    var cur = 0, raf = 0, lastT = 0;
 
-    function setMini(on) {
-      if (mini === on) return;
-      mini = on;
-      bar.classList.toggle('tab-mini', on);
+    function target() {
+      var t = (main.scrollTop - START) / RANGE;
+      return t < 0 ? 0 : (t > 1 ? 1 : t);
     }
 
-    main.addEventListener('scroll', function () {
-      var y = main.scrollTop;
-      var dy = y - lastY;
-      lastY = y;
-      if (Date.now() < suppressUntil) return;        // 切页定位期间不响应
-      if (Math.abs(dy) > JUMP) { acc = 0; return; }  // 程序性跳变
-      if (dy === 0) return;
-      if (y <= TOP_ZONE) { acc = 0; setMini(false); return; }
-      if ((dy > 0) !== (acc > 0)) acc = 0;           // 方向反转：重新累计
-      acc += dy;
-      if (!mini && acc > MINI_AFTER) setMini(true);
-      else if (mini && acc < -EXPAND_AFTER) setMini(false);
-    }, { passive: true });
+    function apply(v) { bar.style.setProperty('--mini', v.toFixed(4)); }
 
-    // 点按底栏是一次明确的导航动作：展开，并短暂静默滚动事件（避免切页定位被误判）
-    bar.addEventListener('click', function () {
-      suppressUntil = Date.now() + 600;
-      acc = 0;
-      setMini(false);
-    });
+    function tick(now) {
+      // 帧间隔补偿：60/120Hz 手感一致，低帧率设备也不会变迟钝
+      var dt = lastT ? Math.min(64, now - lastT) : 16.7;
+      lastT = now;
+      var k = 1 - Math.pow(1 - EASE, dt / 16.7);
 
-    // 视口尺寸变化（手机地址栏收展 / 旋转屏幕）会引发重排与惯性滚动事件，
-    // 其间不改变收缩状态，并重置累计基准，避免把重排误判成用户滑动。
-    window.addEventListener('resize', function () {
-      suppressUntil = Math.max(suppressUntil, Date.now() + 250);
-      acc = 0;
-      lastY = main.scrollTop;
-    });
+      var t = target();
+      cur += (t - cur) * k;
+      if (Math.abs(t - cur) < 0.002) { cur = t; raf = 0; lastT = 0; }  // 追平后停帧，省电
+      apply(cur);
+      if (raf) raf = requestAnimationFrame(tick);
+    }
+
+    function kick() { if (!raf) raf = requestAnimationFrame(tick); }
+
+    cur = target();
+    apply(cur);
+    main.addEventListener('scroll', kick, { passive: true });
+    window.addEventListener('resize', kick);   // 地址栏收展 / 旋转屏幕后重新对齐
   })();
 
   /* ==================== 二、真折射（仅 Chromium） ==================== */
@@ -151,7 +145,7 @@
 
   function schedule() {
     clearTimeout(timer);
-    timer = setTimeout(build, 160);   // 等收缩/展开动画收敛再重建，避免动画中逐帧生成
+    timer = setTimeout(build, 160);   // 等形变收敛再重建，避免拖动中逐帧生成
   }
 
   build();
