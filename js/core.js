@@ -22,7 +22,9 @@
  *       profile: null,             // 个人资料 {sex,age,height,weight,activity,goal,
  *                                  //   calorieBudget} | null（未设置）
  *       entries: [],               // 饮食记录（营养数值写入时快照，不随后续食物库变动）
- *       customFoods: []            // 自定义食物（每 100g 营养 + 默认份量）
+ *       customFoods: [],           // 自定义食物（每 100g 营养 + 默认份量）
+ *       favorites: [],             // 收藏的食物 id（字符串数组，最多 12 个）
+ *       combos: []                 // 常用组合 {id,name,items[],createdAt}（最多 10 个）
  *     },
  *     lastBackupAt: 16961...       // 上次备份（导出 JSON）的毫秒时间戳，Number | null
  *   }
@@ -36,6 +38,7 @@
  *   getBudget()  setBudget(amount)
  *   getDiet()  addDietEntry({date,meal,name,grams,kcal,...})  deleteDietEntry(id)
  *   setDietProfile(profile)  addCustomFood({name,k,p,f,c,g})  deleteCustomFood(id)
+ *   toggleFavorite(foodId)  addCombo(name, items)  deleteCombo(id)
  *   getMonthSummary(ym)  getMonthlyTrend(n)  getBudgetStatus(ym)
  *   exportJSON()  importJSON(text)  exportCSV(ym)
  *   formatAmount(n)  todayStr()  ymOf(dateStr)  currentYm()
@@ -502,13 +505,112 @@ var Store = (function () {
     };
   }
 
+  /** 收藏的食物 id 上限（超出丢弃最旧的） */
+  var FAVORITES_MAX = 12;
+
+  /** 常用组合数量上限 / 单个组合条目上限 */
+  var COMBOS_MAX = 10;
+  var COMBO_ITEMS_MAX = 20;
+
+  /**
+   * 规范收藏列表：仅保留非空字符串 id，去重，最多 12 个
+   * @param {*} list
+   * @returns {Array<string>}
+   */
+  function normalizeFavorites(list) {
+    var out = [];
+    if (!Array.isArray(list)) {
+      return out;
+    }
+    list.forEach(function (id) {
+      if (typeof id === 'string' && id && out.indexOf(id) === -1 && out.length < FAVORITES_MAX) {
+        out.push(id);
+      }
+    });
+    return out;
+  }
+
+  /**
+   * 规范组合内一条食物快照（结构与饮食记录一致但无 id/date/createdAt）；
+   * 克数/热量非法的条目丢弃
+   * @param {*} it
+   * @returns {Object|null}
+   */
+  function normalizeComboItem(it) {
+    if (!it || typeof it !== 'object' || Array.isArray(it)) {
+      return null;
+    }
+    var grams = Number(it.grams);
+    var kcal = Number(it.kcal);
+    if (!isFinite(grams) || grams <= 0 || grams > 20000) return null;
+    if (!isFinite(kcal) || kcal < 0 || kcal > 20000) return null;
+    function macro(v) {
+      var n = Number(v);
+      return (isFinite(n) && n >= 0) ? Math.round(n * 10) / 10 : 0;
+    }
+    return {
+      foodId: (typeof it.foodId === 'string' && it.foodId) ? it.foodId : '',
+      name: (typeof it.name === 'string' && it.name.trim()) ? it.name.trim().slice(0, 30) : '未知食物',
+      cat: (typeof it.cat === 'string' && it.cat) ? it.cat : '',
+      grams: Math.round(grams * 10) / 10,
+      kcal: Math.round(kcal),
+      protein: macro(it.protein),
+      fat: macro(it.fat),
+      carb: macro(it.carb),
+      meal: DIET_MEALS.indexOf(it.meal) !== -1 ? it.meal : 'snack'
+    };
+  }
+
+  /**
+   * 规范组合列表：名称为空/无有效条目的丢弃，数量超出上限截断
+   * @param {*} list
+   * @returns {Array}
+   */
+  function normalizeCombos(list) {
+    var out = [];
+    if (!Array.isArray(list)) {
+      return out;
+    }
+    list.forEach(function (c, i) {
+      if (!c || typeof c !== 'object' || Array.isArray(c) || out.length >= COMBOS_MAX) {
+        return;
+      }
+      var name = (typeof c.name === 'string') ? c.name.trim() : '';
+      if (!name) {
+        return;
+      }
+      var items = [];
+      if (Array.isArray(c.items)) {
+        c.items.forEach(function (it) {
+          if (items.length >= COMBO_ITEMS_MAX) {
+            return;
+          }
+          var ni = normalizeComboItem(it);
+          if (ni) items.push(ni);
+        });
+      }
+      if (!items.length) {
+        return;
+      }
+      var createdAt = Number(c.createdAt);
+      out.push({
+        id: (typeof c.id === 'string' && c.id) ? c.id : makeUniqueId('cb', null, i),
+        name: name.slice(0, 20),
+        items: items,
+        createdAt: isFinite(createdAt) ? createdAt : Date.now()
+      });
+    });
+    return out;
+  }
+
   /**
    * 清洗饮食数据域：结构不完整时逐项兜底，绝不抛异常
    * @param {*} d
-   * @returns {{profile:(Object|null), entries:Array, customFoods:Array}}
+   * @returns {{profile:(Object|null), entries:Array, customFoods:Array,
+   *            favorites:Array, combos:Array}}
    */
   function sanitizeDiet(d) {
-    var out = { profile: null, entries: [], customFoods: [] };
+    var out = { profile: null, entries: [], customFoods: [], favorites: [], combos: [] };
     if (!d || typeof d !== 'object' || Array.isArray(d)) {
       return out;
     }
@@ -525,6 +627,8 @@ var Store = (function () {
         if (nf) out.customFoods.push(nf);
       });
     }
+    out.favorites = normalizeFavorites(d.favorites);
+    out.combos = normalizeCombos(d.combos);
     return out;
   }
 
@@ -627,7 +731,7 @@ var Store = (function () {
       records: [],
       categories: DEFAULT_CATEGORIES.concat(DEFAULT_INCOME_CATEGORIES).map(copyObj),
       budgets: { monthly: null },
-      diet: { profile: null, entries: [], customFoods: [] },
+      diet: { profile: null, entries: [], customFoods: [], favorites: [], combos: [] },
       lastBackupAt: null
     };
   }
@@ -707,7 +811,14 @@ var Store = (function () {
       diet: {
         profile: d.diet.profile ? copyObj(d.diet.profile) : null,
         entries: d.diet.entries.map(copyObj),
-        customFoods: d.diet.customFoods.map(copyObj)
+        customFoods: d.diet.customFoods.map(copyObj),
+        favorites: d.diet.favorites.slice(),
+        // 组合内嵌 items 条目，需逐条拷贝避免外部改动污染缓存
+        combos: d.diet.combos.map(function (c) {
+          var cc = copyObj(c);
+          cc.items = c.items.map(copyObj);
+          return cc;
+        })
       },
       lastBackupAt: d.lastBackupAt
     };
@@ -1157,15 +1268,22 @@ var Store = (function () {
   // ==================== 对外 API：饮食（diet） ====================
 
   /**
-   * 饮食数据域（个人资料 / 饮食记录 / 自定义食物），返回副本
-   * @returns {{profile:(Object|null), entries:Array, customFoods:Array}}
+   * 饮食数据域（个人资料 / 饮食记录 / 自定义食物 / 收藏 / 组合），返回副本
+   * @returns {{profile:(Object|null), entries:Array, customFoods:Array,
+   *            favorites:Array, combos:Array}}
    */
   function getDiet() {
     var d = getData().diet;
     return {
       profile: d.profile ? copyObj(d.profile) : null,
       entries: d.entries.map(copyObj),
-      customFoods: d.customFoods.map(copyObj)
+      customFoods: d.customFoods.map(copyObj),
+      favorites: d.favorites.slice(),
+      combos: d.combos.map(function (c) {
+        var cc = copyObj(c);
+        cc.items = c.items.map(copyObj);
+        return cc;
+      })
     };
   }
 
@@ -1289,6 +1407,90 @@ var Store = (function () {
   function deleteCustomFood(id) {
     var data = getData();
     data.diet.customFoods = data.diet.customFoods.filter(function (c) {
+      return c.id !== id;
+    });
+    persist();
+    return true;
+  }
+
+  /**
+   * 切换食物收藏状态（已收藏则取消，未收藏则加到最前；最多保留 12 个）
+   * @param {string} foodId 食物 id（内置或自定义）
+   * @returns {boolean} 调用后是否处于已收藏状态
+   * @throws {Error} '食物 id 不合法'
+   */
+  function toggleFavorite(foodId) {
+    if (typeof foodId !== 'string' || !foodId) {
+      throw new Error('食物 id 不合法');
+    }
+    var favs = getData().diet.favorites;
+    var idx = favs.indexOf(foodId);
+    if (idx !== -1) {
+      favs.splice(idx, 1);
+      persist();
+      return false;
+    }
+    favs.unshift(foodId);
+    if (favs.length > FAVORITES_MAX) {
+      favs.length = FAVORITES_MAX;
+    }
+    persist();
+    return true;
+  }
+
+  /**
+   * 新增常用组合（食物营养快照数组，与饮食记录同构但无 id/date）
+   * @param {string} name 组合名称（1~20 字）
+   * @param {Array<{foodId:string=, name:string, cat:string=, grams:number,
+   *          kcal:number, protein:number=, fat:number=, carb:number=,
+   *          meal:string=}>} items 非空，最多 20 条
+   * @returns {Object} 新组合（含生成的 id）
+   * @throws {Error} '组合名称不能为空' / '组合内容不能为空' / '组合最多保存 10 个'
+   */
+  function addCombo(name, items) {
+    var n = (typeof name === 'string') ? name.trim() : '';
+    if (!n) {
+      throw new Error('组合名称不能为空');
+    }
+    var list = Array.isArray(items) ? items : [];
+    var cleaned = [];
+    list.forEach(function (it) {
+      if (cleaned.length >= COMBO_ITEMS_MAX) {
+        return;
+      }
+      var ni = normalizeComboItem(it);
+      if (ni) cleaned.push(ni);
+    });
+    if (!cleaned.length) {
+      throw new Error('组合内容不能为空');
+    }
+    var data = getData();
+    if (data.diet.combos.length >= COMBOS_MAX) {
+      throw new Error('组合最多保存 10 个');
+    }
+    var seen = {};
+    data.diet.combos.forEach(function (c) { seen[c.id] = true; });
+    var combo = {
+      id: makeUniqueId('cb', seen),
+      name: n.slice(0, 20),
+      items: cleaned,
+      createdAt: Date.now()
+    };
+    data.diet.combos.push(combo);
+    persist();
+    var copy = copyObj(combo);
+    copy.items = combo.items.map(copyObj);
+    return copy;
+  }
+
+  /**
+   * 按 id 删除常用组合
+   * @param {string} id
+   * @returns {true}
+   */
+  function deleteCombo(id) {
+    var data = getData();
+    data.diet.combos = data.diet.combos.filter(function (c) {
       return c.id !== id;
     });
     persist();
@@ -1782,6 +1984,9 @@ var Store = (function () {
     setDietProfile: setDietProfile,
     addCustomFood: addCustomFood,
     deleteCustomFood: deleteCustomFood,
+    toggleFavorite: toggleFavorite,
+    addCombo: addCombo,
+    deleteCombo: deleteCombo,
     // 统计
     getMonthSummary: getMonthSummary,
     getMonthlyTrend: getMonthlyTrend,

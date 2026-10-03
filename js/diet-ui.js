@@ -31,6 +31,7 @@ var DietUI = (function () {
   var unitName = '克';        // 选中的份量单位名
   var unitGrams = 1;          // 选中的单位对应克数（克=1）
   var pickCount = 1;          // 单位数量（输入框的受控值）
+  var nlpResult = null;       // 智能记餐解析预览（DietNLP.parse 结果）
   var profileEditing = false; // 个人资料是否处于编辑态
   var searchTimer = null;
   var toastTimer = null;
@@ -61,6 +62,18 @@ var DietUI = (function () {
   /** 今天日期 'YYYY-MM-DD'（与 Store 同口径，本地时区） */
   function todayStr() {
     return Store.todayStr();
+  }
+
+  /** 日期偏移：'2026-10-03' 偏移 -1 → '2026-10-02'（本地时区，跨月/跨年自动进位） */
+  function shiftDate(dateStr, delta) {
+    var p = dateStr.split('-');
+    var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10) + delta);
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
+
+  /** 食物是否已收藏 */
+  function isFavorite(foodId) {
+    return Store.getDiet().favorites.indexOf(foodId) !== -1;
   }
 
   /* ==================== 渲染：今日概览 ==================== */
@@ -126,14 +139,24 @@ var DietUI = (function () {
     var kw = query.trim();
     var box = $('food-search-results');
     if (!kw) {
-      // 无关键词：展示常用食物快捷入口
+      // 无关键词：收藏的食物置顶，下面是常用食物快捷入口
+      var favFoods = Store.getDiet().favorites.map(function (id) {
+        return Diet.findFood(id);
+      }).filter(Boolean);
+      var favChips = '';
+      for (var f = 0; f < favFoods.length; f++) {
+        favChips += '<button type="button" class="food-chip" data-id="' + esc(favFoods[f].id) + '">⭐ ' +
+          esc(favFoods[f].name) + '</button>';
+      }
       var chips = '';
       for (var i = 0; i < QUICK_IDS.length; i++) {
-        var f = Diet.findFood(QUICK_IDS[i]);
-        if (f) chips += '<button type="button" class="food-chip" data-id="' + esc(f.id) + '">' +
-          esc(f.name) + '</button>';
+        var food = Diet.findFood(QUICK_IDS[i]);
+        if (food) chips += '<button type="button" class="food-chip" data-id="' + esc(food.id) + '">' +
+          esc(food.name) + '</button>';
       }
-      box.innerHTML = chips ? '<div class="food-quick-row">' + chips + '</div>' : '';
+      box.innerHTML =
+        (favChips ? '<div class="food-quick-row">' + favChips + '</div>' : '') +
+        (chips ? '<div class="food-quick-row">' + chips + '</div>' : '');
       return;
     }
     var list = Diet.searchFoods(kw, 8);
@@ -183,6 +206,8 @@ var DietUI = (function () {
     box.innerHTML = '<div class="pick-panel">' +
       '<div class="pick-head"><span class="pick-name">' + esc(selected.name) + '</span>' +
       '<span class="pick-cat">' + (cat ? cat.icon + ' ' + esc(cat.name) : '') + '</span>' +
+      '<button type="button" class="pick-fav' + (isFavorite(selected.id) ? ' on' : '') +
+      '" data-act="toggle-fav">' + (isFavorite(selected.id) ? '★ 已收藏' : '☆ 收藏') + '</button>' +
       '<button type="button" class="pick-clear" data-act="clear-pick">✕</button></div>' +
       '<div class="pick-info">每 100g：' + selected.k + ' 千卡 · 蛋白 ' + selected.p +
       'g · 脂肪 ' + selected.f + 'g · 碳水 ' + selected.c + 'g</div>' +
@@ -273,6 +298,10 @@ var DietUI = (function () {
     var p = date.split('-');
     $('diet-entries-title').textContent =
       parseInt(p[0], 10) + '年' + parseInt(p[1], 10) + '月' + parseInt(p[2], 10) + '日记录';
+
+    // 工具按钮：前一天有记录时显示「复制前一天」；当天有记录时显示「存为组合」
+    var prevHas = Diet.getDayEntries(shiftDate(date, -1)).length > 0;
+    $('diet-entries-tools').classList.toggle('hidden', !entries.length && !prevHas);
 
     if (!entries.length) {
       listEl.innerHTML = '<div class="empty-tip">这一天还没有饮食记录</div>';
@@ -417,16 +446,251 @@ var DietUI = (function () {
     renderProfile();
   }
 
+  /* ==================== v2：智能记餐（自然语言解析） ==================== */
+
+  /** 解析输入框里的句子，生成预览 */
+  function parseNlp() {
+    var text = $('diet-nlp-input').value;
+    var res = DietNLP.parse(text);
+    if (!res.ok) { toast('没认出食物，试试「一碗米饭一个鸡蛋」'); return; }
+    nlpResult = res;
+    renderNlpPreview();
+  }
+
+  function renderNlpPreview() {
+    var box = $('diet-nlp-preview');
+    if (!nlpResult) {
+      box.innerHTML = '';
+      return;
+    }
+    var matched = 0;
+    var kcalSum = 0;
+    var html = '<div class="nlp-preview"><div class="nlp-head">识别为「' +
+      Diet.mealName(nlpResult.meal) + '」</div>';
+    for (var i = 0; i < nlpResult.items.length; i++) {
+      var it = nlpResult.items[i];
+      if (it.matched) {
+        matched += 1;
+        kcalSum += it.kcal;
+        html += '<div class="nlp-item"><span class="nlp-ok">✓</span>' +
+          '<span class="nlp-name">' + esc(it.name) + '</span>' +
+          '<span class="nlp-meta">' + it.count + it.unitName + ' · ' + it.grams + 'g</span>' +
+          '<span class="nlp-kcal">' + it.kcal + ' 千卡</span></div>';
+      } else {
+        html += '<div class="nlp-item miss"><span class="nlp-ok">✗</span>' +
+          '<span class="nlp-name">未识别「' + esc(it.name) + '」</span></div>';
+      }
+    }
+    html += '<button type="button" id="nlp-add-btn" class="btn-primary btn-sm nlp-add-btn">全部添加到' +
+      Diet.mealName(nlpResult.meal) + '（' + matched + ' 项 · ' + Math.round(kcalSum) + ' 千卡）</button></div>';
+    box.innerHTML = html;
+  }
+
+  /** 把预览中全部已识别项写入当前浏览的日期 */
+  function addAllNlp() {
+    if (!nlpResult) return;
+    var added = 0;
+    try {
+      for (var i = 0; i < nlpResult.items.length; i++) {
+        var it = nlpResult.items[i];
+        if (!it.matched) continue;
+        Store.addDietEntry({
+          date: date,
+          meal: nlpResult.meal,
+          foodId: it.foodId,
+          name: it.name,
+          cat: it.cat,
+          grams: it.grams,
+          kcal: it.kcal,
+          protein: it.protein,
+          fat: it.fat,
+          carb: it.carb
+        });
+        added += 1;
+      }
+    } catch (e) { toast(e.message); return; }
+    nlpResult = null;
+    $('diet-nlp-input').value = '';
+    $('diet-nlp-preview').innerHTML = '';
+    toast('已记录 ' + added + ' 项 ✓');
+    renderOverview();
+    renderEntries();
+    renderAdvice();
+    renderTrend();
+  }
+
+  /* ==================== v2：常用组合 ==================== */
+
+  function renderCombos() {
+    var box = $('diet-combos');
+    var combos = Store.getDiet().combos;
+    if (!combos.length) {
+      box.innerHTML = '';
+      return;
+    }
+    var html = '<div class="combo-list"><div class="combo-title">我的组合</div>';
+    for (var i = 0; i < combos.length; i++) {
+      var c = combos[i];
+      var kcalSum = 0;
+      for (var j = 0; j < c.items.length; j++) kcalSum += num(c.items[j].kcal);
+      html += '<div class="combo-row">' +
+        '<span class="combo-name">' + esc(c.name) + '</span>' +
+        '<span class="combo-meta">' + c.items.length + ' 项 · ' + Math.round(kcalSum) + ' 千卡</span>' +
+        '<button type="button" class="btn-secondary btn-sm" data-act="apply-combo" data-id="' + esc(c.id) + '">一键添加</button>' +
+        '<button type="button" class="btn-icon" data-act="del-combo" data-id="' + esc(c.id) + '">🗑️</button>' +
+        '</div>';
+    }
+    box.innerHTML = html + '</div>';
+  }
+
+  /** 把组合内全部食物按各自快照写入当前浏览的日期 */
+  function applyCombo(id) {
+    var combos = Store.getDiet().combos;
+    var combo = null;
+    for (var i = 0; i < combos.length; i++) {
+      if (combos[i].id === id) combo = combos[i];
+    }
+    if (!combo) return;
+    var added = 0;
+    try {
+      for (var j = 0; j < combo.items.length; j++) {
+        var it = combo.items[j];
+        Store.addDietEntry({
+          date: date,
+          meal: it.meal,
+          foodId: it.foodId,
+          name: it.name,
+          cat: it.cat,
+          grams: it.grams,
+          kcal: it.kcal,
+          protein: it.protein,
+          fat: it.fat,
+          carb: it.carb
+        });
+        added += 1;
+      }
+    } catch (e) { toast(e.message); return; }
+    toast('已添加「' + combo.name + '」' + added + ' 项 ✓');
+    renderOverview();
+    renderEntries();
+    renderAdvice();
+    renderTrend();
+  }
+
+  /* ==================== v2：复制前一天 / 存为组合 ==================== */
+
+  /** 把前一天的全部记录复制到当前浏览的日期 */
+  function copyPrevDay() {
+    var prev = shiftDate(date, -1);
+    var prevEntries = Diet.getDayEntries(prev);
+    if (!prevEntries.length) {
+      toast('前一天没有饮食记录');
+      return;
+    }
+    if (Diet.getDayEntries(date).length && !confirm('这一天已有记录，再复制一份前一天的吗？')) {
+      return;
+    }
+    var added = 0;
+    try {
+      for (var i = 0; i < prevEntries.length; i++) {
+        var e = prevEntries[i];
+        Store.addDietEntry({
+          date: date,
+          meal: e.meal,
+          foodId: e.foodId,
+          name: e.name,
+          cat: e.cat,
+          grams: e.grams,
+          kcal: e.kcal,
+          protein: e.protein,
+          fat: e.fat,
+          carb: e.carb,
+          note: e.note
+        });
+        added += 1;
+      }
+    } catch (err) { toast(err.message); return; }
+    toast('已复制 ' + added + ' 项 ✓');
+    renderOverview();
+    renderEntries();
+    renderAdvice();
+    renderTrend();
+  }
+
+  /** 把当前日期的全部记录存为一个常用组合（弹窗命名） */
+  var pendingComboEntries = null; // 待保存的记录快照（弹窗打开期间持有）
+
+  function openComboModal() {
+    var entries = Diet.getDayEntries(date);
+    if (!entries.length) {
+      toast('这一天还没有记录，先记一餐吧');
+      return;
+    }
+    pendingComboEntries = entries.map(function (e) {
+      return {
+        foodId: e.foodId, name: e.name, cat: e.cat,
+        grams: e.grams, kcal: e.kcal,
+        protein: e.protein, fat: e.fat, carb: e.carb,
+        meal: e.meal
+      };
+    });
+    $('combo-name-input').value = '组合 ' + (Store.getDiet().combos.length + 1);
+    $('modal-combo').classList.remove('hidden');
+    $('combo-name-input').focus();
+  }
+
+  function closeComboModal() {
+    $('modal-combo').classList.add('hidden');
+    pendingComboEntries = null;
+  }
+
+  function comboSaveConfirm() {
+    if (!pendingComboEntries) { closeComboModal(); return; }
+    var name = $('combo-name-input').value.trim();
+    if (!name) { toast('请填写组合名称'); return; }
+    try {
+      Store.addCombo(name, pendingComboEntries);
+    } catch (err) { toast(err.message); return; }
+    closeComboModal();
+    toast('组合已保存 ✓');
+    renderCombos();
+  }
+
+  /* ==================== v2：近 7 天热量趋势 ==================== */
+
+  function renderTrend() {
+    var days = [];
+    var hasData = false;
+    for (var i = 6; i >= 0; i--) {
+      var d = shiftDate(date, -i);
+      var s = Diet.daySummary(d);
+      if (s.count) hasData = true;
+      days.push({
+        label: d.slice(5),
+        kcal: s.kcal,
+        tip: parseInt(d.slice(5, 7), 10) + '月' + parseInt(d.slice(8), 10) + '日 · ' + s.kcal + ' 千卡'
+      });
+    }
+    var targets = Diet.getTargets();
+    $('diet-trend-empty').classList.toggle('hidden', hasData);
+    Charts.renderCalorieTrend($('diet-trend-chart'), hasData ? days : [], targets ? targets.kcal : null);
+  }
+
   /* ==================== 渲染总入口 ==================== */
 
   function render() {
     if (!date) date = todayStr();
     $('diet-date').value = date;
+    // 图表随渲染重建：离开统计页时 stats 图表已被销毁，这里统一兜底
+    Charts.destroyAll();
     renderOverview();
     renderSearch();
     renderPick();
+    renderCombos();
+    renderNlpPreview();
     renderEntries();
     renderAdvice();
+    renderTrend();
     renderProfile();
   }
 
@@ -442,6 +706,16 @@ var DietUI = (function () {
       renderOverview();
       renderEntries();
       renderAdvice();
+      renderTrend();
+    });
+
+    // 智能记餐（自然语言解析）
+    $('diet-nlp-btn').addEventListener('click', parseNlp);
+    $('diet-nlp-input').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') parseNlp();
+    });
+    $('diet-nlp-preview').addEventListener('click', function (e) {
+      if (e.target.closest('#nlp-add-btn')) addAllNlp();
     });
 
     // 食物搜索（防抖）
@@ -488,6 +762,11 @@ var DietUI = (function () {
       if (act.getAttribute('data-act') === 'clear-pick') {
         selected = null;
         renderPick();
+      } else if (act.getAttribute('data-act') === 'toggle-fav') {
+        if (!selected) return;
+        Store.toggleFavorite(selected.id);
+        renderPick();
+        renderSearch();
       } else if (act.getAttribute('data-act') === 'add-entry') {
         addEntry();
       }
@@ -508,6 +787,34 @@ var DietUI = (function () {
       renderOverview();
       renderEntries();
       renderAdvice();
+      renderTrend();
+    });
+
+    // 当日记录工具：复制前一天 / 存为组合
+    $('diet-copy-prev-btn').addEventListener('click', copyPrevDay);
+    $('diet-save-combo-btn').addEventListener('click', openComboModal);
+
+    // 组合命名弹窗
+    $('combo-save-btn').addEventListener('click', comboSaveConfirm);
+    $('combo-cancel-btn').addEventListener('click', closeComboModal);
+    $('combo-name-input').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') comboSaveConfirm();
+    });
+
+    // 常用组合：一键添加 / 删除
+    $('diet-combos').addEventListener('click', function (e) {
+      var applyBtn = e.target.closest('[data-act="apply-combo"]');
+      if (applyBtn) {
+        applyCombo(applyBtn.getAttribute('data-id'));
+        return;
+      }
+      var delBtn = e.target.closest('[data-act="del-combo"]');
+      if (delBtn) {
+        if (!confirm('删除这个组合吗？')) return;
+        Store.deleteCombo(delBtn.getAttribute('data-id'));
+        toast('组合已删除');
+        renderCombos();
+      }
     });
 
     // 自定义食物
@@ -587,6 +894,8 @@ var DietUI = (function () {
     query = '';
     selected = null;
     profileEditing = false;
+    nlpResult = null;
+    $('diet-nlp-input').value = '';
   }
 
   return {

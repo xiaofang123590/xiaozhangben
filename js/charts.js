@@ -5,6 +5,7 @@
  *   Charts.renderCategoryPie(canvas, items, title?) 分类占比环形图
  *   Charts.renderDailyTrend(canvas, days)           每日趋势（支出/收入双系列）
  *   Charts.renderMonthlyTrend(canvas, months)       近 N 个月趋势（双系列）
+ *   Charts.renderCalorieTrend(canvas, days, budget) 近 7 天热量柱状图（饮食页）
  *   Charts.renderLineTrend(canvas, rows)            近 N 天走势折线图（双系列）
  *   Charts.destroyAll()                             销毁本模块创建的所有图表实例
  *
@@ -553,6 +554,110 @@
       instances.set(canvas, chart);
     } catch (e) {
       console.warn('[charts] 走势折线图渲染失败：', e);
+      clearCanvas(canvas);
+    }
+  };
+
+  /**
+   * 渲染「近 7 天热量」柱状图（饮食页专用，单位千卡）。
+   * 有预算时按当日摄入占比着色：<80% 绿 / 80%~105% 橙 / >105% 红；
+   * 无预算时全部主题绿。空数据只清空画布（空态由调用方控制提示文案）。
+   * @param {HTMLCanvasElement} canvas 画布元素
+   * @param {Array<{label:string, kcal:number, tip:string}>} days 按日期升序，
+   *        label 为 x 轴短标签（如 '10-02'），tip 为悬浮提示全文
+   * @param {number=} budget 每日热量预算（用于着色，缺省/非法视为无预算）
+   */
+  Charts.renderCalorieTrend = function (canvas, days, budget) {
+    if (!libReady()) {
+      return;
+    }
+    if (!canvas) {
+      console.warn('[charts] renderCalorieTrend：未传入 canvas');
+      return;
+    }
+    days = Array.isArray(days) ? days : [];
+    var b = Number(budget);
+    var hasBudget = isFinite(b) && b > 0;
+
+    destroyChart(canvas);
+
+    if (days.length === 0) {
+      clearCanvas(canvas);
+      return;
+    }
+
+    var rows = days.map(function (d) {
+      return {
+        label: d && d.label !== undefined ? String(d.label) : '',
+        kcal: Number(d && d.kcal) || 0,
+        tip: d && d.tip ? String(d.tip) : ''
+      };
+    });
+
+    var GREEN = 'rgba(0, 181, 120, 0.8)';
+    var ORANGE = 'rgba(255, 152, 0, 0.85)';
+    var RED = 'rgba(250, 81, 81, 0.85)';
+    var colors = rows.map(function (r) {
+      if (!hasBudget) return GREEN;
+      var pct = r.kcal / b;
+      if (pct > 1.05) return RED;
+      if (pct >= 0.8) return ORANGE;
+      return GREEN;
+    });
+
+    var t = theme();
+    var options = baseOptions();
+    options.plugins = {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          title: function () { return ''; },
+          label: function (ctx) {
+            var row = rows[ctx.dataIndex];
+            return row.tip || (row.label + ' ' + row.kcal + ' 千卡');
+          }
+        }
+      }
+    };
+    options.scales = {
+      x: {
+        grid: { display: false },
+        border: { display: false },
+        ticks: { color: t.sub, font: { size: 11 }, maxRotation: 0, minRotation: 0 }
+      },
+      y: {
+        beginAtZero: true,
+        grid: { color: t.grid, borderDash: [4, 4] },
+        border: { display: false },
+        ticks: {
+          color: t.sub,
+          font: { size: 11 },
+          callback: function (value) { return value; }
+        }
+      }
+    };
+
+    var config = {
+      type: 'bar',
+      data: {
+        labels: rows.map(function (r) { return r.label; }),
+        datasets: [{
+          label: '热量',
+          data: rows.map(function (r) { return r.kcal; }),
+          backgroundColor: colors,
+          hoverBackgroundColor: colors,
+          borderRadius: 4,
+          borderSkipped: false
+        }]
+      },
+      options: options
+    };
+
+    try {
+      var chart = new Chart(canvas, config);
+      instances.set(canvas, chart);
+    } catch (e) {
+      console.warn('[charts] 热量趋势图渲染失败：', e);
       clearCanvas(canvas);
     }
   };

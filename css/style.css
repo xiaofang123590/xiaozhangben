@@ -2228,3 +2228,119 @@ body[data-theme="dark"] #shopping-text::placeholder { color: #64756D; }
   background: var(--surface);
   box-shadow: 0 0 0 3px var(--primary-glow);
 }
+
+/* ----------------------------------------------------------------------
+   36. 饮食页 v2（智能记餐 / 收藏 / 组合 / 记录工具 / 7 天趋势）
+   全部引用设计变量，浅色 / 深色（dark 与 auto）自动适配。
+   ---------------------------------------------------------------------- */
+
+/* ---- 36.1 智能记餐输入行与解析预览 ---- */
+.nlp-row { margin-bottom: 14px; }
+
+.nlp-preview {
+  margin: 10px 0 4px;
+  padding: 10px 12px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.nlp-head {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-sub);
+  margin-bottom: 2px;
+}
+.nlp-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 7px;
+  font-size: 13px;
+  color: var(--text-main);
+  line-height: 1.4;
+}
+.nlp-item.miss .nlp-name { color: var(--text-grey); }
+.nlp-ok { flex-shrink: 0; font-weight: 700; }
+.nlp-item .nlp-ok { color: var(--primary-deep); }
+.nlp-item.miss .nlp-ok { color: var(--text-faint); }
+.nlp-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nlp-meta {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-grey);
+  font-variant-numeric: tabular-nums;
+}
+.nlp-kcal {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary-deep);
+  font-variant-numeric: tabular-nums;
+}
+.nlp-add-btn { width: 100%; margin-top: 10px; }
+
+/* ---- 36.2 我的组合 ---- */
+.combo-list { margin-top: 12px; }
+.combo-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-grey);
+  padding-bottom: 2px;
+}
+.combo-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.combo-row:first-of-type { border-top: none; }
+.combo-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.combo-meta {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-grey);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- 36.3 选中面板：收藏按钮 ---- */
+.pick-fav {
+  flex-shrink: 0;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--text-grey);
+  transition: color 0.15s, border-color 0.15s;
+}
+.pick-fav.on {
+  color: #E6A100;
+  border-color: #E6A100;
+  font-weight: 600;
+}
+
+/* ---- 36.4 当日记录工具行 ---- */
+.entries-tools {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 2px;
+}
+
+/* ---- 36.5 近 7 天热量：矮一档的图表容器 ---- */
+.chart-box-sm { height: 180px; }

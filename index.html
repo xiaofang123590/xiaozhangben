@@ -175,14 +175,20 @@
         <div id="diet-overview"></div>
       </div>
 
-      <!-- 记一餐：搜索食物 → 选份量 → 选餐次 -->
+      <!-- 记一餐：智能记餐 / 搜索食物 → 选份量 → 选餐次 -->
       <div class="card">
         <h3 class="card-title">记一餐</h3>
+        <div class="smart-row nlp-row">
+          <input id="diet-nlp-input" type="text" maxlength="50" placeholder="智能记餐：试试「早餐一碗粥一个鸡蛋」" autocomplete="off">
+          <button id="diet-nlp-btn" class="btn-secondary btn-sm">解析</button>
+        </div>
+        <div id="diet-nlp-preview"></div>
         <div class="food-search-row">
           <input id="food-search-input" type="text" maxlength="20" placeholder="搜索食物，如：米饭 / 鸡蛋 / 牛奶" autocomplete="off">
         </div>
         <div id="food-search-results"></div>
         <div id="food-pick-panel"></div>
+        <div id="diet-combos"></div>
         <button id="custom-food-toggle-btn" class="btn-secondary btn-sm food-custom-toggle">＋ 自定义食物</button>
         <div id="custom-food-form" class="hidden">
           <div class="form-row"><label class="form-label">名称</label><input id="cf-name" type="text" maxlength="20" placeholder="如 妈妈牌红烧肉" autocomplete="off"></div>
@@ -203,6 +209,10 @@
       <!-- 当日记录 -->
       <div class="card">
         <h3 class="card-title" id="diet-entries-title">当日记录</h3>
+        <div class="entries-tools hidden" id="diet-entries-tools">
+          <button id="diet-copy-prev-btn" class="btn-secondary btn-sm">📋 复制前一天</button>
+          <button id="diet-save-combo-btn" class="btn-secondary btn-sm">💾 存为组合</button>
+        </div>
         <div id="diet-entries-list"></div>
       </div>
 
@@ -210,6 +220,13 @@
       <div class="card">
         <h3 class="card-title">健康建议</h3>
         <div id="diet-advice-list"></div>
+      </div>
+
+      <!-- 近 7 天热量趋势 -->
+      <div class="card">
+        <h3 class="card-title">近 7 天热量</h3>
+        <div class="chart-box chart-box-sm"><canvas id="diet-trend-chart"></canvas></div>
+        <div id="diet-trend-empty" class="empty-tip hidden">这 7 天还没有饮食记录</div>
       </div>
 
       <!-- 个人资料与热量预算 -->
@@ -344,6 +361,22 @@
   </div>
 </div>
 
+<!-- 组合命名弹窗 -->
+<div id="modal-combo" class="modal hidden">
+  <div class="modal-mask" data-close="1"></div>
+  <div class="modal-body">
+    <h3 class="modal-title">保存为组合</h3>
+    <div class="form-row"><label class="form-label">组合名称</label><input id="combo-name-input" type="text" maxlength="20" placeholder="如 标准早餐" autocomplete="off"></div>
+    <p class="hint">组合会记住这一餐的全部食物和份量，之后在「记一餐」里一键添加。</p>
+    <div class="modal-actions">
+      <span class="modal-actions-right">
+        <button id="combo-cancel-btn" class="btn-secondary">取消</button>
+        <button id="combo-save-btn" class="btn-primary">保存</button>
+      </span>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="hidden"></div>
 
 <script src="js/chart.umd.js"></script>
@@ -353,6 +386,7 @@
 <script src="js/core.js"></script>
 <script src="js/food-db.js"></script>
 <script src="js/diet.js"></script>
+<script src="js/diet-nlp.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/diet-ui.js"></script>
 <script src="js/app.js"></script>
