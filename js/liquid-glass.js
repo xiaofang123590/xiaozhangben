@@ -1,14 +1,19 @@
 /**
  * liquid-glass.js —— 底部导航「液态玻璃」交互层（iOS 26 风格）
  *
- * 一、随手指滑动的连续形变（全平台生效）
+ * 一、随手指的纵向连续形变（全平台生效）
  *   形变量由滚动位置直接决定，与 iOS 大标题收起同一套模型——不是阈值开关：
  *   下滑越过起点后，滚多少就收多少（收窄、变矮、文字淡出同步进行）；上滑即反向
  *   展开，回到顶部完全归位。手指停住，玻璃就停在当前档位；指头一动立刻跟着变。
  *   目标值每帧向自身靠拢一层（追帧平滑），带出液体的滞后与回弹感；最终以 CSS
  *   变量 --mini(0~1) 写入底栏，样式表里各部件尺寸都是它的连续函数。
  *
- * 二、真折射（仅 Chromium：backdrop-filter 支持引用 SVG 滤镜）
+ * 二、玻璃块随手指横向拖动（全平台生效）
+ *   按住底栏左右滑（或在页面内容上横向滑），选中的玻璃块 1:1 跟着手指走；
+ *   松手回弹到最近页签并切换页面。点按行为不变，仍走原有 click 切换。
+ *   拖动期间写入小数 --tab-pos 并关闭回弹过渡，松手清除后由 --tab-index 接管。
+ *
+ * 三、真折射（仅 Chromium：backdrop-filter 支持引用 SVG 滤镜）
  *   用 canvas 按底栏实际尺寸生成「边缘位移贴图」：把玻璃边缘建模成微凸曲面，
  *   R/G 通道编码 X/Y 位移（128 = 不动），经 feImage + feDisplacementMap 弯折玻璃
  *   背后的内容，边缘因此呈现真玻璃的折射。贴图以 100% 铺满滤镜区域，形变过程中
@@ -64,7 +69,125 @@
     window.addEventListener('resize', kick);   // 地址栏收展 / 旋转屏幕后重新对齐
   })();
 
-  /* ==================== 二、真折射（仅 Chromium） ==================== */
+  /* ==================== 二、玻璃块随手指横向拖动 ==================== */
+
+  (function initScrub() {
+    if (!window.PointerEvent) return;              // 无指针事件的内核只保留点按切换
+    var tabs = bar.querySelectorAll('.tab');
+    if (tabs.length < 2) return;
+    var main = document.getElementById('app-main');
+
+    var ENGAGE_BAR = 6;    // 底栏内：横向位移超过此值即接管（要跟手，阈值小）
+    var ENGAGE_PAGE = 44;  // 内容区：滑动须明确是横向意图，阈值大一些
+    var MAX = tabs.length - 1;
+
+    var source = '';       // 'bar' | 'page'：本次手势的起点区域
+    var pointerId = -1;
+    var startX = 0, startY = 0;
+    var baseIdx = 0, engageX = 0;   // 内容区滑动：以接管瞬间为基准，避免起手跳变
+    var dragging = false, pos = 0;
+    var programmatic = false, suppressClick = false, suppressTimer = 0;
+
+    function currentIdx() {
+      return Number(bar.style.getPropertyValue('--tab-index')) || 0;
+    }
+    /* 以页签中心为刻度的横向坐标系：手指落在某页签中心 = 整数档 */
+    function geometry() {
+      var a = tabs[0].getBoundingClientRect();
+      var b = tabs[MAX].getBoundingClientRect();
+      var x0 = a.left + a.width / 2;
+      return { x0: x0, step: (b.left + b.width / 2 - x0) / MAX };
+    }
+    function clampPos(p) { return p < 0 ? 0 : (p > MAX ? MAX : p); }
+    function posFromX(clientX) {
+      var g = geometry();
+      return g.step > 0 ? clampPos((clientX - g.x0) / g.step) : currentIdx();
+    }
+
+    /* 内容区起点落在输入框或可横向滚动的元素上时不接管（避免抢走该有的手势） */
+    function blocked(el) {
+      if (!el || !el.closest) return false;
+      if (el.closest('input, textarea, select, [contenteditable]')) return true;
+      for (var n = el; n && n !== main; n = n.parentElement) {
+        if (n.scrollWidth > n.clientWidth + 4) return true;
+      }
+      return false;
+    }
+
+    function begin(e, from) {
+      if (source) return;                            // 已有指针在手，忽略后续手指
+      source = from;
+      pointerId = e.pointerId;
+      startX = e.clientX;
+      startY = e.clientY;
+      dragging = false;
+    }
+
+    function move(e) {
+      if (!source || e.pointerId !== pointerId) return;
+      var dx = e.clientX - startX, dy = e.clientY - startY;
+      if (!dragging) {
+        var need = source === 'bar' ? ENGAGE_BAR : ENGAGE_PAGE;
+        if (Math.abs(dx) < need || Math.abs(dx) <= Math.abs(dy)) return;  // 纵向意图留给滚动
+        dragging = true;                             // 明确横向：接管本次手势
+        baseIdx = currentIdx();                      // 基准 = 当前页签
+        engageX = e.clientX;                         // 从接管处起算，不累计阈值前位移
+        bar.classList.add('tab-dragging');
+      }
+      if (source === 'bar') {
+        pos = posFromX(e.clientX);                   // 底栏内：直接按手指位置对准
+      } else {
+        // 轮播语义：手指左滑（向右负）= 下一页从右侧进来，玻璃块右移一档
+        var step = geometry().step;
+        pos = step > 0 ? clampPos(baseIdx - (e.clientX - engageX) / step) : baseIdx;
+      }
+      bar.style.setProperty('--tab-pos', pos.toFixed(4));
+    }
+
+    function end(e, cancelled) {
+      if (!source || e.pointerId !== pointerId) return;
+      var wasDragging = dragging;
+      source = '';
+      dragging = false;
+      if (!wasDragging) return;                      // 只是点按：放行原生 click
+      bar.classList.remove('tab-dragging');
+      bar.style.removeProperty('--tab-pos');         // 交还给 --tab-index 驱动
+      if (cancelled) return;                         // 手势被系统接管（拿去滚动）：回弹，不切页
+      var idx = Math.round(pos);
+      if (idx === currentIdx()) return;              // 回弹到原页签
+      suppressClick = true;                          // 吞掉手势尾随的原生 click，避免二次切换
+      clearTimeout(suppressTimer);
+      suppressTimer = setTimeout(function () { suppressClick = false; }, 400);
+      programmatic = true;
+      tabs[idx].click();                             // 复用 app.js 既有的点击切换逻辑
+      programmatic = false;
+    }
+
+    bar.addEventListener('pointerdown', function (e) {
+      if (e.isPrimary === false || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      begin(e, 'bar');
+    });
+    main.addEventListener('pointerdown', function (e) {
+      if (e.isPrimary === false || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      if (blocked(e.target)) return;
+      begin(e, 'page');
+    });
+    window.addEventListener('pointermove', move, { passive: true });
+    window.addEventListener('pointerup', function (e) { end(e, false); });
+    window.addEventListener('pointercancel', function (e) { end(e, true); });
+
+    // 拖动结束后尾随的那次原生 click 需要吞掉（程序性 click 放行，
+    // 否则原生 click 会落在起手页签上造成「切了又切回去」）
+    document.addEventListener('click', function (e) {
+      if (programmatic) return;
+      if (suppressClick) {
+        suppressClick = false;
+        e.stopPropagation();
+      }
+    }, true);
+  })();
+
+  /* ==================== 三、真折射（仅 Chromium） ==================== */
 
   var ua = navigator.userAgent || '';
   var onIOS = /iPad|iPhone|iPod/.test(ua) ||
