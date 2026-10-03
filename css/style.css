@@ -67,6 +67,7 @@
   --shadow-tabbar: 0 14px 34px rgba(var(--primary-rgb), 0.16), 0 3px 10px rgba(0, 0, 0, 0.10);
   --mask-bg:      rgba(17, 24, 20, 0.5);
   --tabbar-h: 70px;            /* 底部导航悬浮胶囊总占位（含底部悬空距离），Toast 定位用 */
+  --ease-liquid: cubic-bezier(0.22, 1, 0.36, 1);  /* 液态形变通用缓动：快起慢收 */
 
   /* App Shell 的画布底色：柔和主题色渐变 */
   --bg-page: linear-gradient(180deg, #DFF4E9 0%, #F2FAF5 45%, #FDFEFD 100%);
@@ -829,6 +830,11 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   border-radius: 999px;
   box-shadow: var(--shadow-tabbar);
   padding: 6px;
+  /* 收缩/展开形变：宽度（left/right）与内边距一起「呼吸」，由 .tab-mini 驱动 */
+  transition: left 0.42s var(--ease-liquid),
+              right 0.42s var(--ease-liquid),
+              padding 0.42s var(--ease-liquid),
+              box-shadow 0.3s ease;
   z-index: 50;
 }
 
@@ -866,7 +872,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   padding: 5px 0 3px;
   color: var(--text-grey);
   border-radius: 999px;
-  transition: color 0.18s;
+  transition: color 0.18s,
+              gap 0.36s var(--ease-liquid),
+              padding 0.36s var(--ease-liquid);
 }
 
 .tab-icon {
@@ -881,6 +889,11 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   font-size: 11px;
   line-height: 1.2;
   letter-spacing: 1px;
+  max-height: 16px;              /* 收缩态折叠动画的上限（实际行高 ~13px） */
+  overflow: hidden;
+  transition: max-height 0.36s var(--ease-liquid),
+              opacity 0.24s ease,
+              transform 0.36s var(--ease-liquid);
 }
 
 /* 激活态：主色高亮 + 图标弹性放大（tabPop 见第 15 节） */
@@ -893,6 +906,23 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .tab.active .tab-label {
   color: var(--primary-deep);
   font-weight: 600;
+}
+
+/* ---- 滚动收缩态（iOS 26 滚动边缘效果，类由 js/liquid-glass.js 切换）：
+        下滑收纳成居中的图标小条，上滑/回到顶部展开。---- */
+#tab-bar.tab-mini {
+  left: 48px;                    /* 收窄：两端内缩，胶囊变短 */
+  right: 48px;
+  padding: 5px;
+}
+#tab-bar.tab-mini .tab {
+  gap: 0;
+  padding: 9px 0;                /* 图标上下居中，按钮高度约 40px */
+}
+#tab-bar.tab-mini .tab-label {
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(6px);
 }
 
 /* ----------------------------------------------------------------------
@@ -1567,7 +1597,11 @@ body[data-mode="dark"] .banner-info {
   left: 7px;
   width: calc((100% - 14px) / 5);          /* 与 5 个等宽页签对齐 */
   transform: translateX(calc(var(--tab-index, 0) * 100%));
-  transition: transform 0.38s cubic-bezier(0.3, 1.36, 0.42, 1);  /* 带过冲回弹，滑起来像液体 */
+  transition: transform 0.38s cubic-bezier(0.3, 1.36, 0.42, 1),  /* 带过冲回弹，滑起来像液体 */
+              top 0.42s var(--ease-liquid),
+              bottom 0.42s var(--ease-liquid),
+              left 0.42s var(--ease-liquid),
+              width 0.42s var(--ease-liquid);
   pointer-events: none;
   z-index: 0;
 }
@@ -1583,6 +1617,13 @@ body[data-mode="dark"] .banner-info {
   box-shadow: inset 0 1px 1px var(--glass-spec),
               inset 0 -1px 2px var(--glass-spec2),
               inset 0 0 0 1px var(--lens-ring);
+}
+/* 收缩态：随底栏内边距联动（始终与页签内容区对齐并内缩 1px） */
+#tab-bar.tab-mini .tab-indicator {
+  top: 5px;
+  bottom: 5px;
+  left: 6px;
+  width: calc((100% - 12px) / 5);
 }
 .tab:active .tab-icon { transform: scale(0.85); }   /* 按下时图标轻微收缩，果冻感 */
 
