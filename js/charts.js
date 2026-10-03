@@ -2,9 +2,10 @@
  * charts.js —— 图表模块（基于 Chart.js v4 UMD，全局变量 Chart）
  *
  * 暴露全局对象 Charts，供 app.js 调用：
- *   Charts.renderCategoryPie(canvas, items)  分类占比环形图
- *   Charts.renderDailyTrend(canvas, days)    每日支出趋势柱状图
- *   Charts.destroyAll()                      销毁本模块创建的所有图表实例
+ *   Charts.renderCategoryPie(canvas, items, title?) 分类占比环形图
+ *   Charts.renderDailyTrend(canvas, days)           每日趋势（支出/收入双系列）
+ *   Charts.renderMonthlyTrend(canvas, months)       近 N 个月趋势（双系列）
+ *   Charts.destroyAll()                             销毁本模块创建的所有图表实例
  *
  * 约定：不主动操作 DOM（仅使用调用方传入的 canvas 元素）；
  *       容器高度由 CSS（.chart-box 260px）控制，图表只负责自适应填充。
@@ -14,10 +15,31 @@
 
   // ==================== 内部工具 ====================
 
-  /** 项目主题色常量 */
-  var COLOR_TEXT_MAIN = '#333';   // 主文字
-  var COLOR_TEXT_SUB = '#999';    // 辅助文字
-  var COLOR_GRID = '#eee';        // 网格线
+  /** 浅色兜底色（读取 CSS 变量失败时使用） */
+  var FALLBACK = { text: '#333', sub: '#999', grid: '#eee', surface: '#ffffff' };
+
+  /** 系列颜色：支出橙 / 收入绿（透明度在柱色里控制） */
+  var SERIES_EXPENSE = 'rgba(255,107,59,0.8)';
+  var SERIES_EXPENSE_HOVER = 'rgba(255,107,59,1)';
+  var SERIES_INCOME = 'rgba(0,181,120,0.8)';
+  var SERIES_INCOME_HOVER = 'rgba(0,149,98,1)';
+
+  /**
+   * 读取当前主题色（跟随 body 上的 CSS 变量，深色模式自动生效）
+   */
+  function theme() {
+    try {
+      var s = getComputedStyle(document.body);
+      return {
+        text: (s.getPropertyValue('--text-main') || '').trim() || FALLBACK.text,
+        sub: (s.getPropertyValue('--text-grey') || '').trim() || FALLBACK.sub,
+        grid: (s.getPropertyValue('--line') || '').trim() || FALLBACK.grid,
+        surface: (s.getPropertyValue('--surface') || '').trim() || FALLBACK.surface
+      };
+    } catch (e) {
+      return FALLBACK;
+    }
+  }
 
   /** 系统默认字体族，保证中文正常显示 */
   var FONT_FAMILY = "system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif";
@@ -127,16 +149,17 @@
         return;
       }
       var ctx = chart.ctx;
+      var t = theme();
       ctx.save();
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       // 第一行：小字“本月支出”
       ctx.font = '12px ' + FONT_FAMILY;
-      ctx.fillStyle = COLOR_TEXT_SUB;
+      ctx.fillStyle = t.sub;
       ctx.fillText(opts.title || '本月支出', arc.x, arc.y - 11);
       // 第二行：加粗总额
       ctx.font = 'bold 18px ' + FONT_FAMILY;
-      ctx.fillStyle = COLOR_TEXT_MAIN;
+      ctx.fillStyle = t.text;
       ctx.fillText('¥' + opts.amount, arc.x, arc.y + 9);
       ctx.restore();
     }
@@ -162,8 +185,9 @@
    * 渲染「分类占比」环形图
    * @param {HTMLCanvasElement} canvas 画布元素
    * @param {Array<{name:string, value:number, color:string}>} items 分类数组
+   * @param {string=} title 环心标题（如 '本月支出' / '本月收入'）
    */
-  Charts.renderCategoryPie = function (canvas, items) {
+  Charts.renderCategoryPie = function (canvas, items, title) {
     // 容错：图表库未加载时直接返回，绝不抛异常
     if (!libReady()) {
       return;
@@ -198,6 +222,7 @@
       total += it.value;
     });
 
+    var t = theme();
     var config = {
       type: 'doughnut',
       data: {
@@ -212,7 +237,7 @@
           backgroundColor: data.map(function (it) {
             return it.color;
           }),
-          borderColor: '#ffffff',        // 扇区间 2px 白色边框
+          borderColor: t.surface,        // 扇区间 2px 分隔边框（跟随表面色）
           borderWidth: 2,
           hoverOffset: 4
         }]
@@ -224,7 +249,7 @@
           legend: {
             position: 'bottom',          // 图例放底部
             labels: {
-              color: COLOR_TEXT_MAIN,
+              color: t.text,
               boxWidth: 12,
               padding: 10,
               font: { size: 12 }
@@ -245,7 +270,7 @@
           },
           // 中心文本插件选项
           pieCenterText: {
-            title: '本月支出',
+            title: title || '本月支出',
             amount: formatMoney(total)
           }
         };
@@ -265,12 +290,86 @@
   };
 
   /**
-   * 渲染「每日趋势」柱状图
+   * 构建双系列（支出/收入）柱状图配置
+   * @param {Array<{label:string, expense:number, income:number}>} rows
+   * @param {Object} opts { tooltipLabel: function(ctx, row) }
+   */
+  function dualBarConfig(rows, opts) {
+    var t = theme();
+    var hasIncome = rows.some(function (r) { return Number(r.income) > 0; });
+    var datasets = [{
+      label: '支出',
+      data: rows.map(function (r) { return Number(r.expense) || 0; }),
+      backgroundColor: SERIES_EXPENSE,
+      hoverBackgroundColor: SERIES_EXPENSE_HOVER,
+      borderRadius: 4,
+      borderSkipped: false
+    }];
+    if (hasIncome) {
+      datasets.push({
+        label: '收入',
+        data: rows.map(function (r) { return Number(r.income) || 0; }),
+        backgroundColor: SERIES_INCOME,
+        hoverBackgroundColor: SERIES_INCOME_HOVER,
+        borderRadius: 4,
+        borderSkipped: false
+      });
+    }
+
+    var options = baseOptions();
+    options.plugins = {
+      legend: {
+        display: hasIncome,             // 只有支出时不显示图例
+        position: 'top',
+        labels: { color: t.text, boxWidth: 12, padding: 8, font: { size: 12 } }
+      },
+      tooltip: {
+        callbacks: {
+          title: function () { return ''; },
+          label: function (ctx) {
+            var row = rows[ctx.dataIndex];
+            var head = opts && typeof opts.tooltipLabel === 'function'
+              ? opts.tooltipLabel(row, ctx)
+              : (row && row.label ? row.label : '');
+            var kind = ctx.dataset.label === '收入' ? '收入' : '支出';
+            return head + ' ' + kind + ': ¥' + formatMoney(ctx.parsed.y);
+          }
+        }
+      }
+    };
+    options.scales = {
+      x: {
+        grid: { display: false },
+        border: { display: false },
+        ticks: {
+          color: t.sub,
+          font: { size: 11 },
+          autoSkip: true,
+          maxTicksLimit: 12,
+          maxRotation: 0,
+          minRotation: 0
+        }
+      },
+      y: {
+        beginAtZero: true,
+        grid: { color: t.grid, borderDash: [4, 4] },
+        border: { display: false },
+        ticks: {
+          color: t.sub,
+          font: { size: 11 },
+          callback: function (value) { return '¥' + value; }
+        }
+      }
+    };
+    return { type: 'bar', data: { labels: rows.map(function (r) { return r.label; }), datasets: datasets }, options: options };
+  }
+
+  /**
+   * 渲染「每日趋势」柱状图（支出/收入双系列，纯支出月自动退化为单系列）
    * @param {HTMLCanvasElement} canvas 画布元素
-   * @param {Array<{label:string, value:number}>} days 按日期升序的每日支出
+   * @param {Array<{label:string, expense:number, income:number}>} days 按日期升序
    */
   Charts.renderDailyTrend = function (canvas, days) {
-    // 容错：图表库未加载时直接返回，绝不抛异常
     if (!libReady()) {
       return;
     }
@@ -280,92 +379,73 @@
     }
     days = Array.isArray(days) ? days : [];
 
-    // 先销毁该画布上的旧实例
     destroyChart(canvas);
 
-    // 空数据：只销毁并清空画布，不画任何东西
     if (days.length === 0) {
       clearCanvas(canvas);
       return;
     }
 
-    // 清洗数据
-    var labels = [];
-    var values = [];
-    days.forEach(function (d) {
-      labels.push(d && d.label !== undefined ? String(d.label) : '');
-      values.push(Number(d && d.value) || 0);
+    // 清洗数据（兼容旧 {label, value} 结构：value 视为支出）
+    var rows = days.map(function (d) {
+      return {
+        label: d && d.label !== undefined ? String(d.label) : '',
+        expense: Number(d && (d.expense !== undefined ? d.expense : d.value)) || 0,
+        income: Number(d && d.income) || 0
+      };
     });
 
-    var config = {
-      type: 'bar',
-      data: {
-        labels: labels,
-        datasets: [{
-          label: '每日支出',
-          data: values,
-          backgroundColor: 'rgba(0,181,120,0.75)',   // 薄荷绿柱色
-          hoverBackgroundColor: 'rgba(0,149,98,1)',  // hover 加深
-          borderRadius: 4,                            // 圆角柱
-          borderSkipped: false
-        }]
-      },
-      options: (function () {
-        var options = baseOptions();
-        options.plugins = {
-          legend: { display: false },   // 单数据集不需要图例
-          tooltip: {
-            callbacks: {
-              title: function () {
-                return '';              // 不显示标题行，全部信息放单行 label
-              },
-              // M月D日: ¥金额
-              label: function (ctx) {
-                var dateStr = toChineseDate(labels[ctx.dataIndex]);
-                return dateStr + ': ¥' + formatMoney(ctx.parsed.y);
-              }
-            }
-          }
-        };
-        options.scales = {
-          x: {
-            grid: { display: false },   // 无竖向网格线
-            border: { display: false },
-            ticks: {
-              color: COLOR_TEXT_SUB,
-              font: { size: 11 },
-              autoSkip: true,           // 标签多时自动跳隔显示
-              maxTicksLimit: 10,
-              maxRotation: 0,
-              minRotation: 0
-            }
-          },
-          y: {
-            beginAtZero: true,          // y 轴从 0 开始
-            grid: {
-              color: COLOR_GRID,        // 横网格线 #eee
-              borderDash: [4, 4]        // 虚线
-            },
-            border: { display: false },
-            ticks: {
-              color: COLOR_TEXT_SUB,
-              font: { size: 11 },
-              callback: function (value) {
-                return '¥' + value;     // 刻度前缀 ¥
-              }
-            }
-          }
-        };
-        return options;
-      })()
-    };
-
     try {
-      var chart = new Chart(canvas, config);
+      var chart = new Chart(canvas, dualBarConfig(rows, {
+        tooltipLabel: function (row) { return toChineseDate(row.label); }
+      }));
       instances.set(canvas, chart);
     } catch (e) {
-      // 渲染失败不拖垮页面
       console.warn('[charts] 每日趋势图渲染失败：', e);
+      clearCanvas(canvas);
+    }
+  };
+
+  /**
+   * 渲染「近 N 个月」柱状图（支出/收入双系列）
+   * @param {HTMLCanvasElement} canvas 画布元素
+   * @param {Array<{ym:string, label:string, expense:number, income:number}>} months 升序
+   */
+  Charts.renderMonthlyTrend = function (canvas, months) {
+    if (!libReady()) {
+      return;
+    }
+    if (!canvas) {
+      console.warn('[charts] renderMonthlyTrend：未传入 canvas');
+      return;
+    }
+    months = Array.isArray(months) ? months : [];
+
+    destroyChart(canvas);
+
+    if (months.length === 0) {
+      clearCanvas(canvas);
+      return;
+    }
+
+    var rows = months.map(function (m) {
+      return {
+        label: m && m.label !== undefined ? String(m.label) : (m && m.ym ? m.ym : ''),
+        expense: Number(m && m.expense) || 0,
+        income: Number(m && m.income) || 0
+      };
+    });
+
+    try {
+      var chart = new Chart(canvas, dualBarConfig(rows, {
+        tooltipLabel: function (row) {
+          var m = /^(\d{1,4})-(\d{1,2})$/.exec(row.label);
+          return m ? (parseInt(m[1], 10) + '年' + parseInt(m[2], 10) + '月') : row.label;
+        }
+      }));
+      instances.set(canvas, chart);
+    } catch (e) {
+      console.warn('[charts] 月度趋势图渲染失败：', e);
       clearCanvas(canvas);
     }
   };

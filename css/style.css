@@ -1118,3 +1118,455 @@ body.standalone-ios #app-header {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ======================================================================
+   （以下为追加内容）29 ~ 32 节：新组件样式 + 深色模式
+   - 深色模式通过 body[data-theme="dark"] 覆盖 :root 变量实现（第 30 节）；
+     系统深色时对 body[data-theme="auto"] 做完全相同的覆盖（第 32 节）。
+   - 浅色模式视觉与追加前完全一致：第 29 节新增变量的默认值即原视觉。
+   ====================================================================== */
+
+/* ----------------------------------------------------------------------
+   29. 补充设计变量：表面 / 轨道（浅色默认值）
+   原规则中写死的白色卡片、图标底、轨道等浅色收敛为变量，
+   供新组件直接引用，并便于深色模式统一替换（深色值见第 30 节）。
+   ---------------------------------------------------------------------- */
+:root {
+  --surface:      #FFFFFF;   /* 主表面：卡片 / 弹窗面板 / 登录卡等 */
+  --surface-2:    #F4F7F4;   /* 次级表面：流水 / 分类图标底 */
+  --surface-soft: #F5F9F6;   /* 行级 hover / active 底色 */
+  --track:        #EDF1ED;   /* 进度条 / 对比条浅灰轨道 */
+}
+
+/* ----------------------------------------------------------------------
+   30. 深色模式 · data-theme="dark"（针对既有样式中写死浅色的规则逐一覆盖）
+   ---------------------------------------------------------------------- */
+body[data-theme="dark"] {
+  /* 主题绿保持 #00B578 不变；hover / 文字档提亮一档以适配深底 */
+  --primary-dark:   #00C985;
+  --primary-deep:   #2BD48F;
+  --primary-light:  #16362B;               /* 选中态深绿底 */
+  --primary-border: #2C5F4B;
+  --primary-glow:   rgba(0, 181, 120, 0.25);
+
+  --text-main:  #E8ECEA;                   /* 主文字 */
+  --text-sub:   #9DB0A7;                   /* 次文字 */
+  --text-grey:  #8A9C93;
+  --text-faint: #6E7F77;                   /* 更弱 */
+
+  --line:     #2A352F;                     /* 分割线 */
+  --bg-input: #232E29;                     /* 输入框底 */
+
+  /* 预算预警 / 超支：深色底 + 亮色字 */
+  --warn-bg:   rgba(255, 184, 77, 0.14);
+  --warn-text: #FFC53D;
+  --warn-line: rgba(255, 184, 77, 0.32);
+  --over-bg:   rgba(250, 81, 81, 0.15);
+  --over-text: #FF8177;
+  --over-line: rgba(250, 81, 81, 0.35);
+
+  /* 表面 / 轨道（第 29 节变量的深色值） */
+  --surface:      #1C2622;                 /* 卡片表面 */
+  --surface-2:    #26322C;
+  --surface-soft: #232E29;
+  --track:        #26312B;
+
+  /* 阴影加重 */
+  --shadow-card:  0 2px 12px rgba(0, 0, 0, 0.4);
+  --shadow-float: 0 10px 28px rgba(0, 0, 0, 0.55);
+
+  color-scheme: dark;                      /* 日期选择器 / 下拉等原生控件跟随深色 */
+
+  /* 页面背景：深色渐变（覆盖原浅色渐变） */
+  background: linear-gradient(180deg, #14201B 0%, #101814 55%, #0F1512 100%) fixed;
+}
+
+/* 根元素 color-scheme：视口滚动条等跟随深色 */
+html:has(body[data-theme="dark"]) { color-scheme: dark; }
+
+/* ---- 以下为写死浅色处的针对性覆盖 ---- */
+
+/* 页面标题（原 #223528 深绿） */
+body[data-theme="dark"] #page-title { color: #D8E8DF; }
+
+/* 主表面：卡片 / 日分组 / 弹窗面板 / 登录卡（原 #FFFFFF） */
+body[data-theme="dark"] :is(.card, .day-group, .modal-body, .auth-card) {
+  background: var(--surface);
+}
+
+/* 次级按钮（原白底；浅色描边/文字色随变量自动翻转） */
+body[data-theme="dark"] .btn-secondary { background: var(--surface); }
+body[data-theme="dark"] .btn-secondary:active { background: var(--primary-light); }
+body[data-theme="dark"] .btn-secondary:hover  { background: #26312C; }
+
+/* 分类九宫格（原白底 + #EDF0ED 描边；选中态单独恢复绿色） */
+body[data-theme="dark"] .cat-item { background: var(--surface); border-color: #2A352F; }
+body[data-theme="dark"] .cat-item.selected {
+  background: var(--primary-light);
+  border-color: var(--primary);
+}
+
+/* 月份切换按钮（原白底 + #E2EAE4 描边 + #666 字） */
+body[data-theme="dark"] .month-btn {
+  background: var(--surface);
+  border-color: #39453E;
+  color: var(--text-sub);
+}
+body[data-theme="dark"] .month-btn:active,
+body[data-theme="dark"] .month-btn:hover {
+  background: var(--primary-light);
+  border-color: var(--primary-border);
+  color: var(--primary-deep);
+}
+
+/* 输入类 focus 白底 → 深色微亮底（原 #FFFFFF） */
+body[data-theme="dark"] input[type="text"]:focus,
+body[data-theme="dark"] input[type="date"]:focus,
+body[data-theme="dark"] input[type="number"]:focus,
+body[data-theme="dark"] .quick-amount-row:focus-within,
+body[data-theme="dark"] .budget-input-row:focus-within { background: #2A3630; }
+body[data-theme="dark"] .auth-card .form-row input:focus { background: #2A3630; }
+
+/* placeholder 调暗（原 #B9C3BC / #C2CBC5） */
+body[data-theme="dark"] input::placeholder { color: #64756D; }
+body[data-theme="dark"] #quick-amount::placeholder { color: #5C6E66; }
+
+/* 行级分割线（原 #F5F7F5 / #F6F8F6） */
+body[data-theme="dark"] .record-item + .record-item,
+body[data-theme="dark"] .bcat-row + .bcat-row,
+body[data-theme="dark"] .mcat-row + .mcat-row { border-top-color: var(--line); }
+
+/* 流水行 hover / active 底色（原 #F5F9F6） */
+body[data-theme="dark"] .record-item:active,
+body[data-theme="dark"] .record-item:hover { background: var(--surface-soft); }
+
+/* 流水 / 分类图标底（原 #F4F7F4） */
+body[data-theme="dark"] .record-icon,
+body[data-theme="dark"] .mcat-icon { background: var(--surface-2); }
+
+/* 进度条轨道（原 #EDF1ED）与支出构成轨道（原 #EEF1EE） */
+body[data-theme="dark"] .progress-track,
+body[data-theme="dark"] .bcat-bar-track { background: var(--track); }
+
+/* 透明小图标按钮 hover / active（原 #F1F5F1 / #F1F4F1） */
+body[data-theme="dark"] .btn-icon:hover,
+body[data-theme="dark"] .btn-icon:active { background: #26312C; }
+
+/* 底部 TabBar（原 rgba(255,255,255,.94) + #ECF0EC 描边） */
+body[data-theme="dark"] #tab-bar {
+  background: rgba(28, 38, 34, 0.92);
+  border-top-color: #26312B;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.45);
+}
+
+/* 弹窗：面板阴影加重（原 rgba(0,0,0,.12)）、遮罩加深（原 rgba(17,24,20,.5)） */
+body[data-theme="dark"] .modal-body { box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.5); }
+body[data-theme="dark"] .modal-mask { background: rgba(6, 10, 8, 0.66); }
+
+/* 登录卡 tab 激活块（原白底） */
+body[data-theme="dark"] .auth-tab.active {
+  background: var(--surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+/* ----------------------------------------------------------------------
+   31. 新组件样式（浅色 / 深色通用的部分一律引用变量）
+   ---------------------------------------------------------------------- */
+
+/* ---- 31.1 分段切换 .type-toggle（快速记账 / 编辑弹窗 / 饼图 / 分类管理 / 主题） ---- */
+.type-toggle {
+  display: flex;
+  background: var(--bg-input);
+  border-radius: 10px;
+  padding: 3px;
+}
+
+.type-btn {
+  flex: 1;
+  height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text-sub);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+}
+
+/* 激活小块：浅色 = 白底；深色下 --surface 即卡片表面色（变量自动切换） */
+.type-btn.active {
+  background: var(--surface);
+  color: var(--primary-deep);
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* 紧凑变体：饼图支出/收入切换、主题切换 */
+.pie-toggle .type-btn,
+.theme-toggle .type-btn {
+  height: 28px;
+  font-size: 12px;
+}
+.pie-toggle { flex-shrink: 0; }    /* 在 .card-head 内不被标题挤压 */
+
+/* 分段切换与相邻内容的间距（快捷卡 / 弹窗里下方紧跟输入区） */
+#quick-type-toggle { margin-bottom: 12px; }
+#edit-type-toggle,
+#category-kind-toggle { margin-bottom: 14px; }
+
+/* ---- 31.2 智能记账行（#smart-input + 「解析」按钮） ---- */
+.smart-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.smart-row input {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  height: 40px;
+  padding: 0 12px;                 /* 高度固定，垂直居中交给输入框自身 */
+  font-size: 14px;
+}
+.smart-row .btn-sm { flex-shrink: 0; }   /* 「解析」按钮复用第 4 节 .btn-sm */
+
+/* ---- 31.3 搜索行（.search-row.card：#search-input + #search-scope） ---- */
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;              /* 覆盖 .card 的 16px 内边距 */
+}
+#search-input {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  height: 38px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+#search-scope {
+  flex-shrink: 0;
+  height: 38px;
+  border: none;
+  border-radius: 10px;
+  background: var(--bg-input);
+  color: var(--text-sub);
+  font-size: 14px;
+  font-family: inherit;
+  padding: 0 8px;
+  cursor: pointer;
+}
+
+/* ---- 31.4 统计页汇总（#stat-summary） ----
+   原规则即 flex + .summary-item{flex:1}，未写死 3 列：
+   放 4 个 .summary-item（收入/支出/结余/笔数）时自动均分，无需改动 */
+.summary-value.negative { color: var(--danger); }   /* 结余为负 */
+
+/* ---- 31.5 本月 vs 上月：分类对比行（#compare-list，JS 动态生成） ---- */
+.compare-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+.compare-row + .compare-row { border-top: 1px solid var(--line); }
+
+.cmp-icon {
+  width: 22px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 16px;
+  line-height: 1.2;
+}
+.cmp-name {
+  flex: 0 0 56px;
+  font-size: 13px;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cmp-track {
+  flex: 1;
+  min-width: 0;
+  height: 8px;
+  background: var(--track);        /* 浅灰轨道，深色下随变量替换 */
+  border-radius: 999px;
+  overflow: hidden;
+}
+.cmp-bar {
+  height: 100%;                    /* 宽度 / 颜色由 JS 内联写入 */
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+.cmp-amount {
+  flex: 0 0 78px;
+  text-align: right;
+  font-size: 12.5px;
+  color: var(--text-sub);
+  font-variant-numeric: tabular-nums;
+}
+.cmp-pct {
+  flex: 0 0 58px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--text-grey);
+  font-variant-numeric: tabular-nums;
+}
+.cmp-pct.up   { color: var(--danger); }         /* 涨：支出变多，警示红 */
+.cmp-pct.down { color: var(--primary-deep); }   /* 降：支出变少，主题绿 */
+
+/* ---- 31.6 数据备份提醒（#backup-hint，默认 .hidden） ---- */
+.backup-hint {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-line);
+  color: var(--warn-text);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+
+/* ---- 31.7 流水金额：收入为绿色（文本由 JS 生成，样式只管颜色） ---- */
+.record-amount.income { color: var(--primary-deep); }
+.day-total.positive   { color: var(--primary-deep); }   /* 日小计为净收入 */
+
+/* ---- 31.8 信息横幅（智能提醒）：浅蓝（圆角/内边距沿用第 5 节 .banner） ---- */
+.banner-info {
+  background: #E8F1FD;
+  border-color: #C7DBFB;
+  color: #2563EB;
+}
+/* 深色版本 */
+body[data-theme="dark"] .banner-info {
+  background: rgba(59, 130, 246, 0.16);
+  border-color: rgba(125, 168, 251, 0.38);
+  color: #8AB6FF;
+}
+
+/* ----------------------------------------------------------------------
+   32. 深色模式 · 跟随系统（prefers-color-scheme: dark + data-theme="auto"）
+   内容与第 30 节及 31.8 的深色覆盖完全一致，仅选择器前缀换成 body[data-theme="auto"]
+   ---------------------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  body[data-theme="auto"] {
+    --primary-dark:   #00C985;
+    --primary-deep:   #2BD48F;
+    --primary-light:  #16362B;
+    --primary-border: #2C5F4B;
+    --primary-glow:   rgba(0, 181, 120, 0.25);
+
+    --text-main:  #E8ECEA;
+    --text-sub:   #9DB0A7;
+    --text-grey:  #8A9C93;
+    --text-faint: #6E7F77;
+
+    --line:     #2A352F;
+    --bg-input: #232E29;
+
+    --warn-bg:   rgba(255, 184, 77, 0.14);
+    --warn-text: #FFC53D;
+    --warn-line: rgba(255, 184, 77, 0.32);
+    --over-bg:   rgba(250, 81, 81, 0.15);
+    --over-text: #FF8177;
+    --over-line: rgba(250, 81, 81, 0.35);
+
+    --surface:      #1C2622;
+    --surface-2:    #26322C;
+    --surface-soft: #232E29;
+    --track:        #26312B;
+
+    --shadow-card:  0 2px 12px rgba(0, 0, 0, 0.4);
+    --shadow-float: 0 10px 28px rgba(0, 0, 0, 0.55);
+
+    color-scheme: dark;
+    background: linear-gradient(180deg, #14201B 0%, #101814 55%, #0F1512 100%) fixed;
+  }
+
+  html:has(body[data-theme="auto"]) { color-scheme: dark; }
+
+  body[data-theme="auto"] #page-title { color: #D8E8DF; }
+
+  body[data-theme="auto"] :is(.card, .day-group, .modal-body, .auth-card) {
+    background: var(--surface);
+  }
+
+  body[data-theme="auto"] .btn-secondary { background: var(--surface); }
+  body[data-theme="auto"] .btn-secondary:active { background: var(--primary-light); }
+  body[data-theme="auto"] .btn-secondary:hover  { background: #26312C; }
+
+  body[data-theme="auto"] .cat-item { background: var(--surface); border-color: #2A352F; }
+  body[data-theme="auto"] .cat-item.selected {
+    background: var(--primary-light);
+    border-color: var(--primary);
+  }
+
+  body[data-theme="auto"] .month-btn {
+    background: var(--surface);
+    border-color: #39453E;
+    color: var(--text-sub);
+  }
+  body[data-theme="auto"] .month-btn:active,
+  body[data-theme="auto"] .month-btn:hover {
+    background: var(--primary-light);
+    border-color: var(--primary-border);
+    color: var(--primary-deep);
+  }
+
+  body[data-theme="auto"] input[type="text"]:focus,
+  body[data-theme="auto"] input[type="date"]:focus,
+  body[data-theme="auto"] input[type="number"]:focus,
+  body[data-theme="auto"] .quick-amount-row:focus-within,
+  body[data-theme="auto"] .budget-input-row:focus-within { background: #2A3630; }
+  body[data-theme="auto"] .auth-card .form-row input:focus { background: #2A3630; }
+
+  body[data-theme="auto"] input::placeholder { color: #64756D; }
+  body[data-theme="auto"] #quick-amount::placeholder { color: #5C6E66; }
+
+  body[data-theme="auto"] .record-item + .record-item,
+  body[data-theme="auto"] .bcat-row + .bcat-row,
+  body[data-theme="auto"] .mcat-row + .mcat-row { border-top-color: var(--line); }
+
+  body[data-theme="auto"] .record-item:active,
+  body[data-theme="auto"] .record-item:hover { background: var(--surface-soft); }
+
+  body[data-theme="auto"] .record-icon,
+  body[data-theme="auto"] .mcat-icon { background: var(--surface-2); }
+
+  body[data-theme="auto"] .progress-track,
+  body[data-theme="auto"] .bcat-bar-track { background: var(--track); }
+
+  body[data-theme="auto"] .btn-icon:hover,
+  body[data-theme="auto"] .btn-icon:active { background: #26312C; }
+
+  body[data-theme="auto"] #tab-bar {
+    background: rgba(28, 38, 34, 0.92);
+    border-top-color: #26312B;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.45);
+  }
+
+  body[data-theme="auto"] .modal-body { box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.5); }
+  body[data-theme="auto"] .modal-mask { background: rgba(6, 10, 8, 0.66); }
+
+  body[data-theme="auto"] .auth-tab.active {
+    background: var(--surface);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  }
+
+  body[data-theme="auto"] .banner-info {
+    background: rgba(59, 130, 246, 0.16);
+    border-color: rgba(125, 168, 251, 0.38);
+    color: #8AB6FF;
+  }
+}
+
+/* ----------------------------------------------------------------------
+   33. 分类管理分组标题（支出分类 / 收入分类）
+   ---------------------------------------------------------------------- */
+.mcat-group-title {
+  font-size: 12px;
+  color: var(--text-grey);
+  padding: 10px 2px 4px;
+}

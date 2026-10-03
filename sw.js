@@ -5,7 +5,7 @@
  * 注意：以后更新了 css/js/图标 内容，请把 CACHE_VERSION 号 +1，否则手机上
  *       可能一直读到旧缓存。
  */
-var CACHE_VERSION = 'xzb-v1';
+var CACHE_VERSION = 'xzb-v2';
 
 var PRECACHE = [
   './',
@@ -14,6 +14,7 @@ var PRECACHE = [
   './css/style.css',
   './js/chart.umd.js',
   './js/auth.js',
+  './js/nlp.js',
   './js/core.js',
   './js/charts.js',
   './js/app.js',
