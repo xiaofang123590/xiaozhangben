@@ -5,6 +5,7 @@
  *   Charts.renderCategoryPie(canvas, items, title?) 分类占比环形图
  *   Charts.renderDailyTrend(canvas, days)           每日趋势（支出/收入双系列）
  *   Charts.renderMonthlyTrend(canvas, months)       近 N 个月趋势（双系列）
+ *   Charts.renderLineTrend(canvas, rows)            近 N 天走势折线图（双系列）
  *   Charts.destroyAll()                             销毁本模块创建的所有图表实例
  *
  * 约定：不主动操作 DOM（仅使用调用方传入的 canvas 元素）；
@@ -446,6 +447,112 @@
       instances.set(canvas, chart);
     } catch (e) {
       console.warn('[charts] 月度趋势图渲染失败：', e);
+      clearCanvas(canvas);
+    }
+  };
+
+  /**
+   * 渲染「近 N 天走势」折线图（支出/收入双系列，纯支出时单系列）
+   * @param {HTMLCanvasElement} canvas 画布元素
+   * @param {Array<{label:string, expense:number, income:number}>} rows 按日期升序
+   */
+  Charts.renderLineTrend = function (canvas, rows) {
+    if (!libReady()) {
+      return;
+    }
+    if (!canvas) {
+      console.warn('[charts] renderLineTrend：未传入 canvas');
+      return;
+    }
+    rows = Array.isArray(rows) ? rows : [];
+
+    destroyChart(canvas);
+
+    if (rows.length === 0) {
+      clearCanvas(canvas);
+      return;
+    }
+
+    var t = theme();
+    var hasIncome = rows.some(function (r) { return Number(r.income) > 0; });
+    var datasets = [{
+      label: '支出',
+      data: rows.map(function (r) { return Number(r.expense) || 0; }),
+      borderColor: SERIES_EXPENSE_HOVER,
+      backgroundColor: 'rgba(255,107,59,0.12)',
+      fill: true,
+      tension: 0.35,
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      pointBackgroundColor: SERIES_EXPENSE_HOVER
+    }];
+    if (hasIncome) {
+      datasets.push({
+        label: '收入',
+        data: rows.map(function (r) { return Number(r.income) || 0; }),
+        borderColor: 'rgba(0,181,120,1)',
+        backgroundColor: 'transparent',
+        fill: false,
+        tension: 0.35,
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        pointBackgroundColor: 'rgba(0,149,98,1)'
+      });
+    }
+
+    var options = baseOptions();
+    options.interaction = { mode: 'index', intersect: false };
+    options.plugins = {
+      legend: {
+        display: hasIncome,
+        position: 'top',
+        labels: { color: t.text, boxWidth: 12, padding: 8, font: { size: 12 } }
+      },
+      tooltip: {
+        callbacks: {
+          title: function (items) {
+            var row = rows[items[0] && items[0].dataIndex];
+            return row ? toChineseDate(row.label) : '';
+          },
+          label: function (ctx) {
+            var kind = ctx.dataset.label === '收入' ? '收入' : '支出';
+            return kind + ': ¥' + formatMoney(ctx.parsed.y);
+          }
+        }
+      }
+    };
+    options.scales = {
+      x: {
+        grid: { display: false },
+        border: { display: false },
+        ticks: {
+          color: t.sub,
+          font: { size: 11 },
+          autoSkip: true,
+          maxTicksLimit: 8,
+          maxRotation: 0,
+          minRotation: 0
+        }
+      },
+      y: {
+        beginAtZero: true,
+        grid: { color: t.grid, borderDash: [4, 4] },
+        border: { display: false },
+        ticks: {
+          color: t.sub,
+          font: { size: 11 },
+          callback: function (value) { return '¥' + value; }
+        }
+      }
+    };
+
+    try {
+      var chart = new Chart(canvas, { type: 'line', data: { labels: rows.map(function (r) { return r.label; }), datasets: datasets }, options: options });
+      instances.set(canvas, chart);
+    } catch (e) {
+      console.warn('[charts] 走势折线图渲染失败：', e);
       clearCanvas(canvas);
     }
   };

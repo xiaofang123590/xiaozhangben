@@ -1,13 +1,14 @@
 /**
  * app.js —— 界面逻辑与模块集成层
- * 依赖：core.js（Store）、charts.js（Charts）、auth.js（Auth）、nlp.js（NLP）
+ * 依赖：core.js（Store）、charts.js（Charts）、auth.js（Auth）、nlp.js（NLP）、
+ *       food-db.js（FOOD_DB）、diet.js（Diet）、diet-ui.js（DietUI）
  */
 (function () {
 'use strict';
 
 var $ = function (id) { return document.getElementById(id); };
 
-var VIEW_TITLES = { record: '记账', stats: '统计', budget: '预算', manage: '管理' };
+var VIEW_TITLES = { record: '记账', stats: '统计', budget: '预算', diet: '饮食', manage: '管理' };
 var WEEKS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
 var data = null;              // Store 数据缓存
@@ -75,11 +76,12 @@ function switchView(view) {
   }
 
   $('page-title').textContent = VIEW_TITLES[view];
-  $('month-nav').classList.toggle('hidden', view === 'manage');
+  $('month-nav').classList.toggle('hidden', view === 'manage' || view === 'diet');
 
   if (view === 'record') { renderQuickCategories(); renderRecordList(); }
   else if (view === 'stats') renderStats();
   else if (view === 'budget') renderBudget();
+  else if (view === 'diet') DietUI.render();
   else if (view === 'manage') { renderThemeToggle(); renderCategoryManage(); renderBackupHint(); }
 }
 
@@ -243,7 +245,9 @@ function renderRecordList() {
     var isIncome = r.type === 'income';
     html += '<div class="record-item" data-id="' + esc(r.id) + '">' +
       '<span class="record-icon">' + esc(cat.icon) + '</span>' +
-      '<div class="record-info"><span class="record-cat">' + esc(cat.name) + '</span>' +
+      '<div class="record-info"><span class="record-cat">' + esc(cat.name) +
+      (r.items && r.items.length ? '<span class="items-badge">🧾 ' + r.items.length + '件</span>' : '') +
+      '</span>' +
       (r.note ? '<span class="record-note">' + esc(r.note) + '</span>' : '') +
       '</div><span class="' + (isIncome ? 'record-amount income' : 'record-amount') + '">' +
       (isIncome ? '+' + f(r.amount) : '-' + f(r.amount)) + '</span></div>';
@@ -297,6 +301,15 @@ function renderStats() {
   $('trend-empty').classList.toggle('hidden', days.length > 0);
   Charts.renderDailyTrend($('trend-chart'), days);
 
+  // 近 30 天走势折线
+  var lineRows = buildLast30Days();
+  var hasLineData = false;
+  for (var li = 0; li < lineRows.length; li++) {
+    if (lineRows[li].expense > 0 || lineRows[li].income > 0) { hasLineData = true; break; }
+  }
+  $('line-empty').classList.toggle('hidden', hasLineData);
+  Charts.renderLineTrend($('line-chart'), lineRows);
+
   // 近 6 个月
   var trend = Store.getMonthlyTrend(6);
   var months = [];
@@ -310,6 +323,32 @@ function renderStats() {
 
   // 本月 vs 上月
   renderCompare(s);
+}
+
+/** 最近 30 天（含今天）每日收支，无记录的日期补 0 */
+function buildLast30Days() {
+  var byDay = {};
+  var records = Store.getRecords();
+  var start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - 29);
+  var startStr = start.getFullYear() + '-' + ('0' + (start.getMonth() + 1)).slice(-2) + '-' + ('0' + start.getDate()).slice(-2);
+  for (var i = 0; i < records.length; i++) {
+    var r = records[i];
+    if (r.date < startStr) continue;
+    if (!byDay[r.date]) byDay[r.date] = { expense: 0, income: 0 };
+    if (r.type === 'income') byDay[r.date].income += r.amount;
+    else byDay[r.date].expense += r.amount;
+  }
+  var rows = [];
+  for (var d = 0; d < 30; d++) {
+    var day = new Date(start);
+    day.setDate(start.getDate() + d);
+    var key = day.getFullYear() + '-' + ('0' + (day.getMonth() + 1)).slice(-2) + '-' + ('0' + day.getDate()).slice(-2);
+    var agg = byDay[key] || { expense: 0, income: 0 };
+    rows.push({ label: key.slice(5), expense: agg.expense, income: agg.income });
+  }
+  return rows;
 }
 
 function renderCompare(s) {
@@ -547,7 +586,107 @@ function openRecordModal(id) {
   $('edit-date').value = r.date;
   $('edit-note').value = r.note || '';
   setEditType(r.type || 'expense');
+  renderEditItems(r.items || []);
   $('modal-record').classList.remove('hidden');
+}
+
+/* ---------- 商品明细编辑（编辑弹窗内） ---------- */
+
+/** 渲染商品明细行；items 为 [{name,qty,price}] */
+function renderEditItems(items) {
+  var list = $('edit-items-list');
+  list.innerHTML = '';
+  for (var i = 0; i < items.length; i++) addItemRow(items[i]);
+  updateItemsSum();
+}
+
+function addItemRow(item) {
+  var row = document.createElement('div');
+  row.className = 'item-row';
+  var it = item || {};
+  row.innerHTML =
+    '<input type="text" maxlength="30" placeholder="商品名" value="' + esc(it.name || '') + '">' +
+    '<input type="text" inputmode="decimal" placeholder="数量" value="' + (it.qty != null ? it.qty : 1) + '">' +
+    '<input type="text" inputmode="decimal" placeholder="单价" value="' + (it.price != null ? it.price : '') + '">' +
+    '<button type="button" class="btn-icon" title="删除">🗑️</button>';
+  $('edit-items-list').appendChild(row);
+  updateItemsSum();
+}
+
+/** 从编辑器读取商品行；name 为空的行丢弃，qty 非法回落 1，price 非法记 0 */
+function collectItems() {
+  var rows = $('edit-items-list').querySelectorAll('.item-row');
+  var items = [];
+  for (var i = 0; i < rows.length; i++) {
+    var inputs = rows[i].querySelectorAll('input');
+    var name = inputs[0].value.trim();
+    if (!name) continue;
+    var qty = parseFloat(inputs[1].value);
+    if (!isFinite(qty) || qty <= 0) qty = 1;
+    var price = parseFloat(inputs[2].value);
+    if (!isFinite(price) || price < 0) price = 0;
+    items.push({ name: name, qty: qty, price: price });
+  }
+  return items;
+}
+
+function updateItemsSum() {
+  var items = collectItems();
+  var sumEl = $('items-sum');
+  if (!items.length) { sumEl.classList.add('hidden'); return; }
+  var total = 0;
+  for (var i = 0; i < items.length; i++) total += items[i].qty * items[i].price;
+  sumEl.textContent = '明细合计 ¥' + f(Math.round(total * 100) / 100) + '（点金额栏可手动改成一致）';
+  sumEl.classList.remove('hidden');
+}
+
+/* ---------- 购物清单导入 ---------- */
+
+function toggleShoppingCard(show) {
+  var card = $('shopping-card');
+  var willShow = show === undefined ? card.classList.contains('hidden') : show;
+  card.classList.toggle('hidden', !willShow);
+  if (willShow) {
+    updateShoppingPreview();
+    $('shopping-text').focus();
+  }
+}
+
+function updateShoppingPreview() {
+  var res = Shopping.parse($('shopping-text').value);
+  var el = $('shopping-preview');
+  if (!res.ok) { el.textContent = ''; return; }
+  el.textContent = '共 ' + res.items.length + ' 件 · 合计 ¥' + f(res.total) +
+    (res.skipped > 0 ? '（' + res.skipped + ' 行未识别）' : '');
+}
+
+function saveShopping() {
+  var res = Shopping.parse($('shopping-text').value);
+  if (!res.ok) { toast('没有解析到商品，检查一下格式'); return; }
+  if (res.total <= 0) { toast('合计金额为 0，请给商品填上价格'); return; }
+  var cats = Store.getCategories('expense');
+  var catId = 'gouwu';
+  var hasGouwu = false;
+  for (var i = 0; i < cats.length; i++) if (cats[i].id === 'gouwu') { hasGouwu = true; break; }
+  if (!hasGouwu) catId = cats.length ? cats[0].id : null;
+  if (!catId) { toast('请先到「管理」页添加分类'); return; }
+  try {
+    Store.addRecord({
+      type: 'expense',
+      amount: res.total,
+      categoryId: catId,
+      date: Store.todayStr(),
+      note: '购物清单',
+      items: res.items
+    });
+  } catch (e) { toast(e.message); return; }
+  $('shopping-text').value = '';
+  updateShoppingPreview();
+  toggleShoppingCard(false);
+  toast('已记 ' + res.items.length + ' 件商品，合计 ¥' + f(res.total) + ' ✓');
+  renderRecordList();
+  refreshBanner();
+  checkReminders();
 }
 
 function editSave() {
@@ -560,7 +699,8 @@ function editSave() {
       amount: amount,
       categoryId: editCat,
       date: $('edit-date').value || Store.todayStr(),
-      note: $('edit-note').value
+      note: $('edit-note').value,
+      items: collectItems()
     });
   } catch (e) { toast(e.message); return; }
   $('modal-record').classList.add('hidden');
@@ -644,6 +784,12 @@ function bindEvents() {
   // 智能记账
   $('smart-parse-btn').addEventListener('click', smartParse);
   $('smart-input').addEventListener('keydown', function (e) { if (e.key === 'Enter') smartParse(); });
+
+  // 购物清单导入
+  $('toggle-shopping-btn').addEventListener('click', function () { toggleShoppingCard(); });
+  $('shopping-cancel-btn').addEventListener('click', function () { toggleShoppingCard(false); });
+  $('shopping-save-btn').addEventListener('click', saveShopping);
+  $('shopping-text').addEventListener('input', updateShoppingPreview);
 
   // 搜索
   $('search-input').addEventListener('input', function () {
@@ -742,6 +888,16 @@ function bindEvents() {
     editCat = btn.getAttribute('data-id');
     renderCategoryGrid($('edit-categories'), editType, editCat);
   });
+
+  // 商品明细编辑器
+  $('add-item-btn').addEventListener('click', function () { addItemRow(null); });
+  $('edit-items-list').addEventListener('click', function (e) {
+    var btn = e.target.closest('.btn-icon');
+    if (!btn) return;
+    btn.parentNode.remove();
+    updateItemsSum();
+  });
+  $('edit-items-list').addEventListener('input', updateItemsSum);
 
   // 分类弹窗
   $('category-save-btn').addEventListener('click', categorySave);
@@ -892,6 +1048,7 @@ function startApp(username) {
   $('quick-date').value = Store.todayStr();
   $('search-input').value = '';
   $('search-scope').value = 'month';
+  DietUI.reset(); // 重置饮食页浏览状态（日期/选中食物等归位到新账户）
   updateMonthLabel();
   applyTheme(loadTheme(), true);
   switchView('record');
@@ -902,6 +1059,7 @@ function startApp(username) {
 function boot() {
   detectStandalone();
   bindEvents();
+  DietUI.init(); // 饮食页事件只绑一次（元素为静态 HTML，与登录状态无关）
   registerServiceWorker();
   var user = Auth.currentUser();
   if (user) {

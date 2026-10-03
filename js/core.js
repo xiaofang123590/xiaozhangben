@@ -8,22 +8,34 @@
  *   {
  *     records: [      // 账单记录（type: 'expense' 支出 / 'income' 收入）
  *       { id:'r1696...', type:'expense', amount:25.5, categoryId:'canyin',
- *         date:'2026-10-01', note:'午餐', createdAt:16961... }
+ *         date:'2026-10-01', note:'午餐', createdAt:16961...,
+ *         items:[{name:'苹果', qty:1, price:5.5}] }
+ *         // ↑ items 可选：商品明细（逐条清洗后挂载，无明细的记录没有该键）。
+ *         //   约定：amount 与 items 相互独立，不强制 sum(qty*price) === amount，
+ *         //   账单金额以 amount 为准，items 仅作明细展示
  *     ],
  *     categories: [   // 分类（16 个默认预设 + 用户自建，kind 区分支出/收入两组）
  *       { id:'canyin', name:'餐饮', icon:'🍜', color:'#FF7043', kind:'expense', custom:false, sort:1 }
  *     ],
  *     budgets: { monthly: null },  // 每月预算，Number | null
+ *     diet: {                      // 饮食模块数据域（旧数据缺失时自动补默认值）
+ *       profile: null,             // 个人资料 {sex,age,height,weight,activity,goal,
+ *                                  //   calorieBudget} | null（未设置）
+ *       entries: [],               // 饮食记录（营养数值写入时快照，不随后续食物库变动）
+ *       customFoods: []            // 自定义食物（每 100g 营养 + 默认份量）
+ *     },
  *     lastBackupAt: 16961...       // 上次备份（导出 JSON）的毫秒时间戳，Number | null
  *   }
  *
  * 对外 API 一览：
  *   load()  save(data)
  *   getRecords()  getMonthRecords(ym, type)  getRecord(id)
- *   addRecord({type,amount,categoryId,date,note})  updateRecord(id,patch)  deleteRecord(id)
+ *   addRecord({type,amount,categoryId,date,note,items})  updateRecord(id,patch)  deleteRecord(id)
  *   searchRecords({q,scope,ym})
  *   getCategories(kind)  addCategory({name,icon,kind})  updateCategory(id,{name,icon})  deleteCategory(id)
  *   getBudget()  setBudget(amount)
+ *   getDiet()  addDietEntry({date,meal,name,grams,kcal,...})  deleteDietEntry(id)
+ *   setDietProfile(profile)  addCustomFood({name,k,p,f,c,g})  deleteCustomFood(id)
  *   getMonthSummary(ym)  getMonthlyTrend(n)  getBudgetStatus(ym)
  *   exportJSON()  importJSON(text)  exportCSV(ym)
  *   formatAmount(n)  todayStr()  ymOf(dateStr)  currentYm()
@@ -130,6 +142,20 @@ var Store = (function () {
       if (hasOwn(o, k)) {
         c[k] = o[k];
       }
+    }
+    return c;
+  }
+
+  /**
+   * 深拷贝一条账单记录：字段浅拷贝 + items 商品明细逐条拷贝，
+   * 保证外部改动（含修改返回的 items 数组/条目）不会污染内部缓存
+   * @param {Object} r
+   * @returns {Object}
+   */
+  function copyRecord(r) {
+    var c = copyObj(r);
+    if (Array.isArray(c.items)) {
+      c.items = c.items.map(copyObj);
     }
     return c;
   }
@@ -269,7 +295,7 @@ var Store = (function () {
       }
       return a.date > b.date ? -1 : 1;
     });
-    return arr.map(copyObj);
+    return arr.map(copyRecord); // 逐条深拷贝（含可选 items 明细）
   }
 
   // ==================== 数据规范（读取/保存时的容错清洗） ====================
@@ -295,17 +321,227 @@ var Store = (function () {
     return out;
   }
 
+  // ==================== 商品明细（record.items）规范 ====================
+
+  /** 单条明细名称的最大长度（字符数，超出视为非法条目） */
+  var ITEM_NAME_MAX = 30;
+
+  /** 单条记录最多保留的明细条数，超出截断 */
+  var ITEM_COUNT_MAX = 50;
+
+  /**
+   * 规范一条商品明细；非法返回 null（由调用方丢弃）：
+   *   name  必须是字符串，trim 后 1~30 字、非空（超长不截断，整条判非法）
+   *   qty   数字 >0、最多两位小数；缺失/为空时缺省 1，非法（0/负数/非数字）判非法
+   *   price 数字 >=0、两位小数；缺失/负数判非法（0 表示免费，允许）
+   * @param {*} it
+   * @returns {Object|null} {name, qty, price}
+   */
+  function normalizeRecordItem(it) {
+    if (!it || typeof it !== 'object' || Array.isArray(it)) {
+      return null;
+    }
+    var name = (typeof it.name === 'string') ? it.name.trim() : '';
+    if (!name || name.length > ITEM_NAME_MAX) {
+      return null;
+    }
+    var qty;
+    if (it.qty === undefined || it.qty === null || it.qty === '') {
+      qty = 1; // 数量缺省 1
+    } else {
+      qty = round2(Number(it.qty));
+      if (!isFinite(qty) || qty <= 0) {
+        return null;
+      }
+    }
+    if (it.price === null || it.price === undefined || it.price === '') {
+      return null; // 价格缺失：无缺省值，整条判非法
+    }
+    var price = round2(Number(it.price));
+    if (!isFinite(price) || price < 0) {
+      return null;
+    }
+    return { name: name, qty: qty, price: price };
+  }
+
+  /**
+   * 规范一组商品明细（清洗层与 type/amount 校验同层，绝不抛异常）：
+   *   - 缺失/非数组 → 返回 null（记录保持无 items 键）
+   *   - 逐条清洗、丢弃非法条目，最多保留 50 条（超出截断）
+   *   - 清洗后为空数组 → 返回 null（同样不设置 items）
+   * 约定：amount 与 items 相互独立，不强制 sum(qty*price) === amount。
+   * @param {*} items
+   * @returns {Array|null}
+   */
+  function normalizeRecordItems(items) {
+    if (!Array.isArray(items)) {
+      return null;
+    }
+    var out = [];
+    for (var i = 0; i < items.length; i++) {
+      var it = normalizeRecordItem(items[i]);
+      if (it) {
+        out.push(it);
+        if (out.length >= ITEM_COUNT_MAX) {
+          break; // 最多 50 条，超出截断
+        }
+      }
+    }
+    return out.length ? out : null;
+  }
+
+  // ==================== 饮食数据域（diet）规范 ====================
+
+  /** 餐次白名单（与 diet.js 的 Diet.MEALS 保持一致） */
+  var DIET_MEALS = ['breakfast', 'lunch', 'dinner', 'snack'];
+
+  /**
+   * 规范个人资料：年龄/身高/体重任一非法即视为「未设置」，返回 null
+   * @param {*} p
+   * @returns {Object|null}
+   */
+  function normalizeDietProfile(p) {
+    if (!p || typeof p !== 'object' || Array.isArray(p)) {
+      return null;
+    }
+    var age = Number(p.age);
+    var height = Number(p.height);
+    var weight = Number(p.weight);
+    if (!isFinite(age) || age < 1 || age > 120) return null;
+    if (!isFinite(height) || height < 80 || height > 250) return null;
+    if (!isFinite(weight) || weight < 20 || weight > 300) return null;
+    // 自定义热量预算：可选，500~10000 之外视为未设置
+    var calorieBudget = null;
+    if (p.calorieBudget !== null && p.calorieBudget !== undefined && p.calorieBudget !== '') {
+      var cb = Number(p.calorieBudget);
+      if (isFinite(cb) && cb >= 500 && cb <= 10000) {
+        calorieBudget = Math.round(cb);
+      }
+    }
+    return {
+      sex: p.sex === 'female' ? 'female' : 'male',
+      age: Math.round(age),
+      height: Math.round(height),
+      weight: Math.round(weight * 10) / 10,
+      activity: [1, 2, 3, 4].indexOf(Number(p.activity)) !== -1 ? Number(p.activity) : 1,
+      goal: ['lose', 'keep', 'gain'].indexOf(p.goal) !== -1 ? p.goal : 'keep',
+      calorieBudget: calorieBudget
+    };
+  }
+
+  /**
+   * 规范一条饮食记录；克数/热量彻底非法的记录丢弃
+   * @param {*} e
+   * @param {number} i 用于补 id
+   * @returns {Object|null}
+   */
+  function normalizeDietEntry(e, i) {
+    if (!e || typeof e !== 'object' || Array.isArray(e)) {
+      return null;
+    }
+    var grams = Number(e.grams);
+    var kcal = Number(e.kcal);
+    if (!isFinite(grams) || grams <= 0 || grams > 20000) return null;
+    if (!isFinite(kcal) || kcal < 0 || kcal > 20000) return null;
+    var createdAt = Number(e.createdAt);
+    function macro(v) {
+      var n = Number(v);
+      return (isFinite(n) && n >= 0) ? Math.round(n * 10) / 10 : 0;
+    }
+    return {
+      id: (typeof e.id === 'string' && e.id) ? e.id : makeUniqueId('d', null, i),
+      date: normalizeDateStr(e.date) || todayStr(),
+      meal: DIET_MEALS.indexOf(e.meal) !== -1 ? e.meal : 'snack',
+      foodId: (typeof e.foodId === 'string' && e.foodId) ? e.foodId : '',
+      name: (typeof e.name === 'string' && e.name.trim()) ? e.name.trim().slice(0, 30) : '未知食物',
+      cat: (typeof e.cat === 'string' && e.cat) ? e.cat : '',
+      grams: Math.round(grams * 10) / 10,
+      kcal: Math.round(kcal),
+      protein: macro(e.protein),
+      fat: macro(e.fat),
+      carb: macro(e.carb),
+      note: normalizeNote(e.note),
+      createdAt: isFinite(createdAt) ? createdAt : Date.now()
+    };
+  }
+
+  /**
+   * 规范一种自定义食物（每 100g 营养）；名称为空的丢弃
+   * @param {*} fd
+   * @param {number} i 用于补 id
+   * @returns {Object|null}
+   */
+  function normalizeCustomFood(fd, i) {
+    if (!fd || typeof fd !== 'object' || Array.isArray(fd)) {
+      return null;
+    }
+    var name = (typeof fd.name === 'string') ? fd.name.trim() : '';
+    if (!name) {
+      return null;
+    }
+    function macro(v) {
+      var n = Number(v);
+      return (isFinite(n) && n >= 0) ? Math.round(n * 10) / 10 : 0;
+    }
+    var g = Number(fd.g);
+    var units = Array.isArray(fd.units) ? fd.units.filter(function (u) {
+      return Array.isArray(u) && typeof u[0] === 'string' &&
+        isFinite(Number(u[1])) && Number(u[1]) > 0;
+    }).map(function (u) {
+      return [u[0], Math.round(Number(u[1]))];
+    }).slice(0, 6) : [];
+    return {
+      id: (typeof fd.id === 'string' && fd.id) ? fd.id : makeUniqueId('cf', null, i),
+      name: name.slice(0, 20),
+      k: macro(fd.k),
+      p: macro(fd.p),
+      f: macro(fd.f),
+      c: macro(fd.c),
+      g: (isFinite(g) && g > 0 && g <= 5000) ? Math.round(g) : 100,
+      units: units
+    };
+  }
+
+  /**
+   * 清洗饮食数据域：结构不完整时逐项兜底，绝不抛异常
+   * @param {*} d
+   * @returns {{profile:(Object|null), entries:Array, customFoods:Array}}
+   */
+  function sanitizeDiet(d) {
+    var out = { profile: null, entries: [], customFoods: [] };
+    if (!d || typeof d !== 'object' || Array.isArray(d)) {
+      return out;
+    }
+    out.profile = normalizeDietProfile(d.profile);
+    if (Array.isArray(d.entries)) {
+      d.entries.forEach(function (e, i) {
+        var ne = normalizeDietEntry(e, i);
+        if (ne) out.entries.push(ne);
+      });
+    }
+    if (Array.isArray(d.customFoods)) {
+      d.customFoods.forEach(function (cf, i) {
+        var nf = normalizeCustomFood(cf, i);
+        if (nf) out.customFoods.push(nf);
+      });
+    }
+    return out;
+  }
+
   /**
    * 清洗一份数据对象：结构不完整/字段非法时做兜底，绝不让页面崩溃。
    * 个别彻底无法使用的脏记录/脏分类会被丢弃（金额非法、名称为空）。
    * record.type / category.kind 均按白名单校验，非法回落 'expense'；
-   * lastBackupAt 缺失或非法补 null。
+   * 记录可选携带商品明细 items（逐条清洗，非法条目丢弃，清洗后为空则不设该键）；
+   * lastBackupAt 缺失或非法补 null；diet 缺失（旧数据）补空默认值。
    * @param {*} parsed 从 localStorage 或导入文件解析出的对象
    * @returns {{records:Array, categories:Array, budgets:{monthly:(number|null)},
+   *            diet:{profile:(Object|null), entries:Array, customFoods:Array},
    *            lastBackupAt:(number|null)}}
    */
   function sanitizeData(parsed) {
-    var out = { records: [], categories: [], budgets: { monthly: null }, lastBackupAt: null };
+    var out = { records: [], categories: [], budgets: { monthly: null },
+      diet: { profile: null, entries: [], customFoods: [] }, lastBackupAt: null };
     if (!parsed || typeof parsed !== 'object') {
       return out;
     }
@@ -321,7 +557,7 @@ var Store = (function () {
           return; // 金额非法的记录无法使用，丢弃
         }
         var createdAt = Number(r.createdAt);
-        out.records.push({
+        var rec = {
           id: (typeof r.id === 'string' && r.id) ? r.id : makeUniqueId('r', null, i),
           type: (r.type === 'expense' || r.type === 'income') ? r.type : 'expense', // 白名单校验，非法回落支出
           amount: round2(amount),
@@ -329,7 +565,13 @@ var Store = (function () {
           date: normalizeDateStr(r.date) || todayStr(),
           note: normalizeNote(r.note),
           createdAt: isFinite(createdAt) ? createdAt : Date.now()
-        });
+        };
+        // 可选商品明细：缺失/非数组/清洗后为空时不设置 items 键（保持旧记录形状）
+        var recItems = normalizeRecordItems(r.items);
+        if (recItems) {
+          rec.items = recItems;
+        }
+        out.records.push(rec);
       });
     }
 
@@ -365,6 +607,9 @@ var Store = (function () {
     // ---- 预算 ----
     out.budgets = normalizeBudgets(parsed.budgets);
 
+    // ---- 饮食（旧数据无 diet 字段时得到空默认值） ----
+    out.diet = sanitizeDiet(parsed.diet);
+
     // ---- 备份时间 ----
     // 仅接受有限的数字毫秒时间戳；缺失/非法（旧格式数据）一律补 null
     if (typeof parsed.lastBackupAt === 'number' && isFinite(parsed.lastBackupAt)) {
@@ -382,6 +627,7 @@ var Store = (function () {
       records: [],
       categories: DEFAULT_CATEGORIES.concat(DEFAULT_INCOME_CATEGORIES).map(copyObj),
       budgets: { monthly: null },
+      diet: { profile: null, entries: [], customFoods: [] },
       lastBackupAt: null
     };
   }
@@ -455,9 +701,14 @@ var Store = (function () {
    */
   function cloneData(d) {
     return {
-      records: d.records.map(copyObj),
+      records: d.records.map(copyRecord), // 记录深拷贝，含 items 明细
       categories: d.categories.map(copyObj),
       budgets: { monthly: d.budgets.monthly },
+      diet: {
+        profile: d.diet.profile ? copyObj(d.diet.profile) : null,
+        entries: d.diet.entries.map(copyObj),
+        customFoods: d.diet.customFoods.map(copyObj)
+      },
       lastBackupAt: d.lastBackupAt
     };
   }
@@ -516,7 +767,8 @@ var Store = (function () {
   // ==================== 对外 API：账单记录 ====================
 
   /**
-   * 所有记录，按 date 倒序、同日按 createdAt 倒序
+   * 所有记录，按 date 倒序、同日按 createdAt 倒序。
+   * 返回副本数组，记录含可选 items 商品明细（深拷贝，外部修改不污染内部）
    * @returns {Array}
    */
   function getRecords() {
@@ -528,7 +780,7 @@ var Store = (function () {
    * @param {string=} ym 缺省时取当前月
    * @param {string=} type 'expense'|'income'，传入则只返回该类型；
    *                       缺省/非法时返回全部类型（兼容旧行为）
-   * @returns {Array}
+   * @returns {Array} 记录副本（含可选 items 明细深拷贝）
    */
   function getMonthRecords(ym, type) {
     var month = ym || currentYm();
@@ -545,13 +797,13 @@ var Store = (function () {
   /**
    * 按 id 查记录
    * @param {string} id
-   * @returns {Object|null}
+   * @returns {Object|null} 记录副本（含可选 items 明细深拷贝）
    */
   function getRecord(id) {
     var records = getData().records;
     for (var i = 0; i < records.length; i++) {
       if (records[i].id === id) {
-        return copyObj(records[i]);
+        return copyRecord(records[i]); // 深拷贝，含 items 明细副本
       }
     }
     return null;
@@ -559,8 +811,13 @@ var Store = (function () {
 
   /**
    * 新增一笔记录（支出或收入）
-   * @param {{type:string=, amount:*, categoryId:string, date:string, note:string=}} input
-   *        type 缺省为 'expense'，只允许 'expense'|'income'
+   * @param {{type:string=, amount:*, categoryId:string, date:string, note:string=,
+   *          items:Array=}} input
+   *        type 缺省为 'expense'，只允许 'expense'|'income'；
+   *        items 可选商品明细 [{name,qty,price}]，逐条清洗；
+   *        缺失/非数组/全部非法时不设置 items 键。
+   *        约定：amount 与 items 相互独立，不强制 sum(qty*price) === amount，
+   *        账单金额以 amount 为准，items 仅作明细展示
    * @returns {Object} 新记录
    * @throws {Error} '记录类型不合法' / '金额不合法'
    */
@@ -585,15 +842,23 @@ var Store = (function () {
       note: normalizeNote(opts.note),    // 去空格，可为空字符串
       createdAt: Date.now()
     };
+    // 可选商品明细：逐条清洗；缺失/非数组/清洗后为空时不设置 items 键
+    var recItems = normalizeRecordItems(opts.items);
+    if (recItems) {
+      rec.items = recItems;
+    }
     data.records.push(rec);
     persist();
-    return copyObj(rec);
+    return copyRecord(rec);
   }
 
   /**
-   * 按 id 合并更新记录（仅处理 amount/categoryId/date/note 这几个字段）
+   * 按 id 合并更新记录（处理 amount/categoryId/date/note/items 这几个字段）
    * @param {string} id
-   * @param {Object} patch 要更新的字段
+   * @param {Object} patch 要更新的字段。
+   *        items 传数组时整体替换为清洗结果（并非与旧明细逐条合并）；
+   *        传 []（或数组清洗后为空）清空明细，即移除 items 键；
+   *        传非数组值（如 null/字符串）视为未提供，保持原明细不变
    * @returns {Object|null} 更新后的记录；id 不存在返回 null
    * @throws {Error} '金额不合法'
    */
@@ -629,8 +894,18 @@ var Store = (function () {
     if (hasOwn(p, 'note')) {
       rec.note = normalizeNote(p.note);
     }
+    // 商品明细：仅当传入数组时处理——整体替换为清洗结果；
+    // 清洗后为空（含传 []）则移除 items 键（清空语义）
+    if (hasOwn(p, 'items') && Array.isArray(p.items)) {
+      var recItems = normalizeRecordItems(p.items);
+      if (recItems) {
+        rec.items = recItems;
+      } else {
+        delete rec.items;
+      }
+    }
     persist();
-    return copyObj(rec);
+    return copyRecord(rec);
   }
 
   /**
@@ -879,6 +1154,147 @@ var Store = (function () {
     return data.budgets.monthly;
   }
 
+  // ==================== 对外 API：饮食（diet） ====================
+
+  /**
+   * 饮食数据域（个人资料 / 饮食记录 / 自定义食物），返回副本
+   * @returns {{profile:(Object|null), entries:Array, customFoods:Array}}
+   */
+  function getDiet() {
+    var d = getData().diet;
+    return {
+      profile: d.profile ? copyObj(d.profile) : null,
+      entries: d.entries.map(copyObj),
+      customFoods: d.customFoods.map(copyObj)
+    };
+  }
+
+  /**
+   * 新增一条饮食记录（营养数值由调用方按食物库预先算好并快照传入）
+   * @param {{date:string=, meal:string, foodId:string=, name:string, cat:string=,
+   *          grams:number, kcal:number, protein:number=, fat:number=,
+   *          carb:number=, note:string=}} input
+   *        date 缺省/非法时记今天；meal 必须是早/午/晚/加餐之一
+   * @returns {Object} 新记录
+   * @throws {Error} '餐次不合法' / '克数不合法' / '热量数值不合法' / '食物名称不能为空'
+   */
+  function addDietEntry(input) {
+    var opts = input || {};
+    if (DIET_MEALS.indexOf(opts.meal) === -1) {
+      throw new Error('餐次不合法');
+    }
+    var grams = Number(opts.grams);
+    if (!isFinite(grams) || grams <= 0 || grams > 20000) {
+      throw new Error('克数不合法');
+    }
+    var kcal = Number(opts.kcal);
+    if (!isFinite(kcal) || kcal < 0 || kcal > 20000) {
+      throw new Error('热量数值不合法');
+    }
+    var name = (typeof opts.name === 'string') ? opts.name.trim() : '';
+    if (!name) {
+      throw new Error('食物名称不能为空');
+    }
+    function macro(v) {
+      var n = Number(v);
+      return (isFinite(n) && n >= 0) ? Math.round(n * 10) / 10 : 0;
+    }
+    var data = getData();
+    var seen = {};
+    data.diet.entries.forEach(function (e) { seen[e.id] = true; });
+
+    var rec = {
+      id: makeUniqueId('d', seen),
+      date: normalizeDateStr(opts.date) || todayStr(),
+      meal: opts.meal,
+      foodId: (typeof opts.foodId === 'string' && opts.foodId) ? opts.foodId : '',
+      name: name.slice(0, 30),
+      cat: (typeof opts.cat === 'string' && opts.cat) ? opts.cat : '',
+      grams: Math.round(grams * 10) / 10,
+      kcal: Math.round(kcal),
+      protein: macro(opts.protein),
+      fat: macro(opts.fat),
+      carb: macro(opts.carb),
+      note: normalizeNote(opts.note),
+      createdAt: Date.now()
+    };
+    data.diet.entries.push(rec);
+    persist();
+    return copyObj(rec);
+  }
+
+  /**
+   * 按 id 删除饮食记录
+   * @param {string} id
+   * @returns {true}
+   */
+  function deleteDietEntry(id) {
+    var data = getData();
+    data.diet.entries = data.diet.entries.filter(function (e) {
+      return e.id !== id;
+    });
+    persist();
+    return true;
+  }
+
+  /**
+   * 保存个人资料（整体替换；字段不合法时抛异常，旧资料保持不变）
+   * @param {{sex:string, age:number, height:number, weight:number,
+   *          activity:number, goal:string, calorieBudget:(number|string|null)}} profile
+   * @returns {Object} 保存后的资料
+   * @throws {Error} '资料不完整或不合法'
+   */
+  function setDietProfile(profile) {
+    var p = normalizeDietProfile(profile);
+    if (!p) {
+      throw new Error('资料不完整或不合法');
+    }
+    getData().diet.profile = p;
+    persist();
+    return copyObj(p);
+  }
+
+  /**
+   * 新增自定义食物（同名查重）
+   * @param {{name:string, k:number, p:number, f:number, c:number,
+   *          g:number=, units:Array=}} input 每 100g 营养 + 默认一份克数
+   * @returns {Object} 新食物
+   * @throws {Error} '食物名称不能为空' / '自定义食物已存在'
+   */
+  function addCustomFood(input) {
+    var nf = normalizeCustomFood(input, 0);
+    if (!nf) {
+      throw new Error('食物名称不能为空');
+    }
+    var customs = getData().diet.customFoods;
+    for (var i = 0; i < customs.length; i++) {
+      if (customs[i].name === nf.name) {
+        throw new Error('自定义食物已存在');
+      }
+    }
+    // 生成保证不重复的 id
+    var seen = {};
+    customs.forEach(function (c) { seen[c.id] = true; });
+    nf.id = makeUniqueId('cf', seen);
+    customs.push(nf);
+    persist();
+    return copyObj(nf);
+  }
+
+  /**
+   * 按 id 删除自定义食物
+   * @param {string} id
+   * @returns {true}
+   */
+  function deleteCustomFood(id) {
+    var data = getData();
+    data.diet.customFoods = data.diet.customFoods.filter(function (c) {
+      return c.id !== id;
+    });
+    persist();
+    return true;
+  }
+
   // ==================== 对外 API：统计 ====================
 
   /**
@@ -1058,6 +1474,7 @@ var Store = (function () {
   /**
    * 导出完整备份（美化格式 JSON 字符串）。
    * 导出即视为完成一次备份：生成 JSON 前把 lastBackupAt 记为当前时间并持久化。
+   * 记录的可选商品明细（items）随记录一并导出。
    * @returns {string} { meta:{app,version,exportedAt}, records, categories,
    *                     budgets, lastBackupAt }
    */
@@ -1074,6 +1491,7 @@ var Store = (function () {
       records: data.records,
       categories: data.categories,
       budgets: data.budgets,
+      diet: data.diet,
       lastBackupAt: data.lastBackupAt
     }, null, 2);
   }
@@ -1175,7 +1593,7 @@ var Store = (function () {
         var rid = (typeof r.id === 'string' && r.id && !recSeen[r.id])
           ? r.id : makeUniqueId('r', recSeen, i);
         recSeen[rid] = true; // 外部提供的 id 也要登记，防止后续重复
-        records.push({
+        var rec = {
           id: rid,
           type: (r.type === 'expense' || r.type === 'income') ? r.type : 'expense', // 白名单校验，非法回落支出
           amount: amount,
@@ -1183,7 +1601,14 @@ var Store = (function () {
           date: date,
           note: normalizeNote(r.note),
           createdAt: isFinite(createdAt) ? createdAt : Date.now()
-        });
+        };
+        // 可选商品明细：新备份带 items 走同一套清洗；
+        // 旧备份（无 items）保持记录无 items 键，完全兼容
+        var recItems = normalizeRecordItems(r.items);
+        if (recItems) {
+          rec.items = recItems;
+        }
+        records.push(rec);
       }
 
       // ---- 预算 ----
@@ -1197,8 +1622,12 @@ var Store = (function () {
         monthly = round2(bn);
       }
 
+      // ---- 饮食（旧格式备份无 diet 字段时得到空默认值） ----
+      var diet = sanitizeDiet(parsed.diet);
+
       // ---- 校验全部通过，才整体替换并保存 ----
-      _data = { records: records, categories: categories, budgets: { monthly: monthly }, lastBackupAt: null };
+      _data = { records: records, categories: categories, budgets: { monthly: monthly },
+        diet: diet, lastBackupAt: null };
       // 新格式备份自带 lastBackupAt；旧格式备份没有，保持 null
       if (typeof parsed.lastBackupAt === 'number' && isFinite(parsed.lastBackupAt)) {
         _data.lastBackupAt = parsed.lastBackupAt;
@@ -1214,10 +1643,29 @@ var Store = (function () {
   }
 
   /**
+   * 商品明细 → CSV 单元格文本：「名称x数量(金额)」以「; 」连接，
+   * 如 '苹果x1(5.50); 牛奶x2(12.80)'。金额取明细单价 price（两位小数），
+   * 不是 qty*price，也与账单 amount 无关（约定二者相互独立）。
+   * 无明细（items 缺失/为空）返回空串
+   * @param {Array=} items
+   * @returns {string}
+   */
+  function recordItemsText(items) {
+    if (!Array.isArray(items) || !items.length) {
+      return '';
+    }
+    return items.map(function (it) {
+      return it.name + 'x' + String(Number(it.qty)) + '(' + formatAmount(it.price) + ')';
+    }).join('; ');
+  }
+
+  /**
    * 导出某月账单 CSV（带 BOM，Excel 打开中文不乱码）
    * @param {string=} ym 形如 '2026-10'，缺省时取当前月
-   * @returns {string} 首字符为 '\uFEFF'，表头：日期,类型,分类,金额,备注
-   *          类型列写「支出/收入」；金额恒为正数（收入同样输出正数）
+   * @returns {string} 首字符为 '\uFEFF'，表头：日期,类型,分类,金额,备注,商品明细
+   *          类型列写「支出/收入」；金额恒为正数（收入同样输出正数）；
+   *          表头升级（备注后新增「商品明细」列）：有明细填「名称x数量(金额)」
+   *          以「; 」连接，无明细填空；含逗号/引号的单元格沿用 csvField 双引号转义
    */
   function exportCSV(ym) {
     var month = ym || currentYm();
@@ -1229,7 +1677,7 @@ var Store = (function () {
       catMap[c.id] = c;
     });
 
-    var lines = ['\uFEFF日期,类型,分类,金额,备注'];
+    var lines = ['\uFEFF日期,类型,分类,金额,备注,商品明细']; // 表头升级：备注后新增「商品明细」列
     getMonthRecords(month).forEach(function (r) {
       var cat = catMap[r.categoryId];
       var catName = cat ? cat.name : FALLBACK_CATEGORY.name;
@@ -1238,7 +1686,8 @@ var Store = (function () {
         csvField(r.type === 'income' ? '收入' : '支出') + ',' +
         csvField(catName) + ',' +
         formatAmount(r.amount) + ',' +
-        csvField(r.note)
+        csvField(r.note) + ',' +
+        csvField(recordItemsText(r.items))
       );
     });
     return lines.join('\r\n');
@@ -1326,6 +1775,13 @@ var Store = (function () {
     // 预算
     getBudget: getBudget,
     setBudget: setBudget,
+    // 饮食（diet）
+    getDiet: getDiet,
+    addDietEntry: addDietEntry,
+    deleteDietEntry: deleteDietEntry,
+    setDietProfile: setDietProfile,
+    addCustomFood: addCustomFood,
+    deleteCustomFood: deleteCustomFood,
     // 统计
     getMonthSummary: getMonthSummary,
     getMonthlyTrend: getMonthlyTrend,

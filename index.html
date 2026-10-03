@@ -74,6 +74,22 @@
           <input id="smart-input" type="text" maxlength="40" placeholder="智能记账：试试「昨天打车23块」" autocomplete="off">
           <button id="smart-parse-btn" class="btn-secondary btn-sm">解析</button>
         </div>
+        <div class="quick-tools-row">
+          <button id="toggle-shopping-btn" class="btn-secondary btn-sm">🛒 导入购物清单</button>
+        </div>
+      </div>
+
+      <!-- 购物清单导入（粘贴多行文本 → 一条购物账单 + 商品明细） -->
+      <div class="card shopping-card hidden" id="shopping-card">
+        <h3 class="card-title">粘贴购物清单</h3>
+        <textarea id="shopping-text" rows="5" placeholder="每行一件商品，例如：&#10;苹果 5.5&#10;牛奶 x2 12.8&#10;薯片 8"></textarea>
+        <div class="import-actions">
+          <span id="shopping-preview" class="shopping-preview"></span>
+          <span class="import-btns">
+            <button id="shopping-cancel-btn" class="btn-secondary btn-sm">取消</button>
+            <button id="shopping-save-btn" class="btn-primary btn-sm">记为购物账单</button>
+          </span>
+        </div>
       </div>
 
       <div class="search-row card">
@@ -107,7 +123,12 @@
       <div class="card">
         <h3 class="card-title">每日趋势</h3>
         <div class="chart-box"><canvas id="trend-chart"></canvas></div>
-        <div id="trend-empty" class="empty-tip hidden">本月暂无支出数据</div>
+        <div id="trend-empty" class="empty-tip hidden">本月暂无数据</div>
+      </div>
+      <div class="card">
+        <h3 class="card-title">近 30 天走势</h3>
+        <div class="chart-box"><canvas id="line-chart"></canvas></div>
+        <div id="line-empty" class="empty-tip hidden">暂无数据</div>
       </div>
       <div class="card">
         <h3 class="card-title">近 6 个月</h3>
@@ -140,6 +161,65 @@
         <h3 class="card-title">本月支出构成</h3>
         <div id="budget-category-list"></div>
         <div id="budget-cat-empty" class="empty-tip hidden">本月暂无支出数据</div>
+      </div>
+    </section>
+
+    <!-- ============ 饮食页 ============ -->
+    <section id="view-diet" class="view hidden">
+      <!-- 今日概览：热量环 + 三大营养素进度 -->
+      <div class="card">
+        <div class="card-head">
+          <h3 class="card-title">今日概览</h3>
+          <input id="diet-date" type="date">
+        </div>
+        <div id="diet-overview"></div>
+      </div>
+
+      <!-- 记一餐：搜索食物 → 选份量 → 选餐次 -->
+      <div class="card">
+        <h3 class="card-title">记一餐</h3>
+        <div class="food-search-row">
+          <input id="food-search-input" type="text" maxlength="20" placeholder="搜索食物，如：米饭 / 鸡蛋 / 牛奶" autocomplete="off">
+        </div>
+        <div id="food-search-results"></div>
+        <div id="food-pick-panel"></div>
+        <button id="custom-food-toggle-btn" class="btn-secondary btn-sm food-custom-toggle">＋ 自定义食物</button>
+        <div id="custom-food-form" class="hidden">
+          <div class="form-row"><label class="form-label">名称</label><input id="cf-name" type="text" maxlength="20" placeholder="如 妈妈牌红烧肉" autocomplete="off"></div>
+          <div class="cf-grid">
+            <div class="form-row"><label class="form-label">热量 kcal/100g</label><input id="cf-kcal" type="number" inputmode="decimal" min="0" step="0.1" placeholder="必填"></div>
+            <div class="form-row"><label class="form-label">蛋白质 g/100g</label><input id="cf-protein" type="number" inputmode="decimal" min="0" step="0.1" placeholder="0"></div>
+            <div class="form-row"><label class="form-label">脂肪 g/100g</label><input id="cf-fat" type="number" inputmode="decimal" min="0" step="0.1" placeholder="0"></div>
+            <div class="form-row"><label class="form-label">碳水 g/100g</label><input id="cf-carb" type="number" inputmode="decimal" min="0" step="0.1" placeholder="0"></div>
+          </div>
+          <div class="form-row"><label class="form-label">默认一份 (g)</label><input id="cf-grams" type="number" inputmode="decimal" min="1" step="1" placeholder="100"></div>
+          <div class="cf-actions">
+            <button id="cf-save-btn" class="btn-primary btn-sm">保存并选中</button>
+          </div>
+          <p class="hint">按每 100g 填写营养值（看包装营养成分表即可），家常菜可按一锅的估算值填写。</p>
+        </div>
+      </div>
+
+      <!-- 当日记录 -->
+      <div class="card">
+        <h3 class="card-title" id="diet-entries-title">当日记录</h3>
+        <div id="diet-entries-list"></div>
+      </div>
+
+      <!-- 健康建议 -->
+      <div class="card">
+        <h3 class="card-title">健康建议</h3>
+        <div id="diet-advice-list"></div>
+      </div>
+
+      <!-- 个人资料与热量预算 -->
+      <div class="card">
+        <div class="card-head">
+          <h3 class="card-title">热量预算</h3>
+          <button id="diet-profile-toggle-btn" class="btn-secondary btn-sm hidden">修改资料</button>
+        </div>
+        <div id="diet-profile-box"></div>
+        <p class="hint">营养数值为常见做法的估算值，仅供日常健康管理参考，不构成医疗建议。体质特殊或有疾病者请遵医嘱。</p>
       </div>
     </section>
 
@@ -189,6 +269,7 @@
     <button class="tab active" data-view="record"><span class="tab-icon">📝</span><span class="tab-label">记账</span></button>
     <button class="tab" data-view="stats"><span class="tab-icon">📊</span><span class="tab-label">统计</span></button>
     <button class="tab" data-view="budget"><span class="tab-icon">🎯</span><span class="tab-label">预算</span></button>
+    <button class="tab" data-view="diet"><span class="tab-icon">🥗</span><span class="tab-label">饮食</span></button>
     <button class="tab" data-view="manage"><span class="tab-icon">⚙️</span><span class="tab-label">管理</span></button>
   </nav>
 </div>
@@ -206,6 +287,16 @@
     <div class="form-row"><label class="form-label">分类</label><div id="edit-categories" class="category-grid"></div></div>
     <div class="form-row"><label class="form-label">日期</label><input id="edit-date" type="date"></div>
     <div class="form-row"><label class="form-label">备注</label><input id="edit-note" type="text" maxlength="30" autocomplete="off"></div>
+    <div class="form-row items-form-row">
+      <label class="form-label">商品明细</label>
+      <div class="items-editor">
+        <div id="edit-items-list"></div>
+        <div class="items-foot">
+          <span id="items-sum" class="items-sum hidden"></span>
+          <button type="button" id="add-item-btn" class="btn-secondary btn-sm">+ 加商品</button>
+        </div>
+      </div>
+    </div>
     <div class="modal-actions">
       <button id="edit-delete-btn" class="btn-danger">删除</button>
       <span class="modal-actions-right">
@@ -258,8 +349,12 @@
 <script src="js/chart.umd.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/nlp.js"></script>
+<script src="js/shopping.js"></script>
 <script src="js/core.js"></script>
+<script src="js/food-db.js"></script>
+<script src="js/diet.js"></script>
 <script src="js/charts.js"></script>
+<script src="js/diet-ui.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

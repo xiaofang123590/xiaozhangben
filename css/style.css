@@ -35,8 +35,9 @@
   --amount: #FF6B3B;           /* 流水金额：橙红 */
 
   --radius-card: 16px;
-  --shadow-card:  0 2px 12px rgba(38, 102, 74, 0.07);
-  --shadow-float: 0 10px 28px rgba(38, 102, 74, 0.13);
+  --primary-bright: #00C98A;   /* 渐变亮端：按钮 / 装饰共用 */
+  --shadow-card:  0 2px 14px rgba(0, 150, 100, 0.09);    /* 更柔 + 主题色相 */
+  --shadow-float: 0 12px 30px rgba(0, 150, 100, 0.15);
   --tabbar-h: 58px;            /* 底部导航估算高度（不含安全区） */
 }
 
@@ -103,9 +104,9 @@ input:focus-visible {
 
 #page-title {
   font-size: 24px;
-  font-weight: 700;
+  font-weight: 800;             /* 品牌感大标题（下划线装饰见 34.1） */
   color: #223528;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
 }
 
 #month-nav {
@@ -203,11 +204,11 @@ input:focus-visible {
 .btn-secondary:active,
 .btn-danger:active { transform: scale(0.97); }
 
-/* 实心主色白字 */
+/* 实心主色白字（微渐变 + 按压反馈见上方共用的 scale(0.97)） */
 .btn-primary {
-  background: var(--primary);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-bright) 100%);
   color: #FFFFFF;
-  box-shadow: 0 3px 8px rgba(0, 181, 120, 0.25);
+  box-shadow: 0 3px 10px rgba(0, 181, 120, 0.30);
 }
 .btn-primary:active { background: var(--primary-dark); }
 
@@ -305,10 +306,12 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 /* ---- 空状态 / 小提示 ---- */
 .empty-tip {
   text-align: center;
-  color: #AAB4AD;
-  font-size: 14px;
-  line-height: 1.7;
-  padding: 40px 16px;
+  color: #6F7D75;               /* 加深一档，保证浅底上的可读对比度 */
+  font-size: 15px;
+  line-height: 1.8;
+  padding: 44px 20px;           /* 上下留白加大，emoji 更醒目 */
+  background: linear-gradient(180deg, rgba(0, 181, 120, 0.05), rgba(0, 181, 120, 0.02));
+  border-radius: 14px;
 }
 
 .hint {
@@ -430,8 +433,11 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .cat-item:active { transform: scale(0.93); }
 
 .cat-icon {
-  font-size: 22px;
+  font-size: 20px;
   line-height: 1.2;
+  padding: 4px 8px;             /* 浅色圆角小底 + 微渐变（深色见 34.11） */
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(0, 181, 120, 0.10), rgba(0, 181, 120, 0.04));
 }
 
 .cat-name {
@@ -483,12 +489,12 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 }
 .day-title {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-faint);
 }
 .day-total {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-grey);
   font-variant-numeric: tabular-nums;
 }
@@ -501,9 +507,13 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   padding: 11px 4px;
   border-radius: 10px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.18s ease;   /* 按压反馈：背景色过渡 */
 }
-.record-item + .record-item { border-top: 1px solid #F5F7F5; }
+/* 分割线：两端渐隐的浅色线（border-image 实现，深色覆盖见 34.11/34.12） */
+.record-item + .record-item {
+  border-top: 1px solid transparent;
+  border-image: linear-gradient(90deg, rgba(0, 181, 120, 0) 0%, #E4ECE7 16%, #E4ECE7 84%, rgba(0, 181, 120, 0) 100%) 1;
+}
 .record-item:active { background: #F5F9F6; }
 
 .record-icon {
@@ -514,7 +524,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   align-items: center;
   justify-content: center;
   font-size: 20px;
-  background: #F4F7F4;
+  background: linear-gradient(180deg, #F7FAF8, #EDF3EF);   /* 微渐变图标底 */
   border-radius: 12px;
 }
 
@@ -577,17 +587,20 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   color: var(--text-grey);
 }
 .summary-value {
-  font-size: 18px;
+  font-size: 20px;              /* 汇总值加大加粗 */
   font-weight: 700;
   color: var(--text-main);
   font-variant-numeric: tabular-nums;
 }
 
-/* Chart.js 容器：必须给确定高度 */
+/* Chart.js 容器：必须给确定高度；内衬淡主题色圆角底（深色见 34.11） */
 .chart-box {
   position: relative;
   width: 100%;
   height: 260px;
+  padding: 12px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(0, 181, 120, 0.055), rgba(0, 181, 120, 0.015));
 }
 /* 对应 empty-tip 可见时（无数据），隐藏空画布：渐进增强 */
 .card:has(> .empty-tip:not(.hidden)) .chart-box { display: none; }
@@ -718,7 +731,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   align-items: center;
   justify-content: center;
   font-size: 18px;
-  background: #F4F7F4;
+  background: linear-gradient(180deg, #F7FAF8, #EDF3EF);   /* 微渐变图标底 */
   border-radius: 10px;
 }
 .mcat-name {
@@ -925,10 +938,10 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
     box-shadow: var(--shadow-float);
   }
 
-  .btn-primary:hover   { background: var(--primary-dark); }
+  .btn-primary:hover   { background: linear-gradient(135deg, var(--primary-dark), #00BC82); }
   .btn-secondary:hover {
     border-color: var(--primary);
-    background: #F4FBF7;
+    background: var(--primary-light);       /* hover 填充浅绿 */
     color: var(--primary-deep);
   }
   .btn-danger:hover    { background: var(--danger-deep); }
@@ -944,7 +957,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   .cat-item:hover:not(.selected) { border-color: var(--primary-border); }
 
   .tab:hover { color: var(--primary-deep); }
-  .tab:hover .tab-icon { filter: none; opacity: 0.85; }
+  .tab:hover .tab-icon { filter: none; opacity: 0.9; transform: translateY(-2px); }  /* 图标微弹 */
 }
 
 /* ----------------------------------------------------------------------
@@ -1197,7 +1210,7 @@ body[data-theme="dark"] :is(.card, .day-group, .modal-body, .auth-card) {
 /* 次级按钮（原白底；浅色描边/文字色随变量自动翻转） */
 body[data-theme="dark"] .btn-secondary { background: var(--surface); }
 body[data-theme="dark"] .btn-secondary:active { background: var(--primary-light); }
-body[data-theme="dark"] .btn-secondary:hover  { background: #26312C; }
+body[data-theme="dark"] .btn-secondary:hover  { background: var(--primary-light); }
 
 /* 分类九宫格（原白底 + #EDF0ED 描边；选中态单独恢复绿色） */
 body[data-theme="dark"] .cat-item { background: var(--surface); border-color: #2A352F; }
@@ -1495,7 +1508,7 @@ body[data-theme="dark"] .banner-info {
 
   body[data-theme="auto"] .btn-secondary { background: var(--surface); }
   body[data-theme="auto"] .btn-secondary:active { background: var(--primary-light); }
-  body[data-theme="auto"] .btn-secondary:hover  { background: #26312C; }
+  body[data-theme="auto"] .btn-secondary:hover  { background: var(--primary-light); }
 
   body[data-theme="auto"] .cat-item { background: var(--surface); border-color: #2A352F; }
   body[data-theme="auto"] .cat-item.selected {
@@ -1569,4 +1582,649 @@ body[data-theme="dark"] .banner-info {
   font-size: 12px;
   color: var(--text-grey);
   padding: 10px 2px 4px;
+}
+
+/* ======================================================================
+   34. 全局视觉美化（第二轮增量）
+   - 顶栏装饰 / 卡片入场 / 标题竖条 / Tab 指示 / 选中呼吸感
+   - 本轮新增组件：quick-tools-row / shopping-card / items-form-row / items-badge
+   - 深色覆盖沿用第 30/32 节机制：34.11 对应 data-theme="dark"，
+     34.12 对应 @media + data-theme="auto"，两块内容保持一致
+   ====================================================================== */
+
+/* ---- 34.1 顶栏：#page-title 渐变短下划线 + 全局等宽数字 ---- */
+#page-title {
+  background-image: linear-gradient(90deg, var(--primary) 0%, rgba(0, 181, 120, 0.12) 100%);
+  background-repeat: no-repeat;
+  background-size: 46px 4px;
+  background-position: 2px 100%;
+  padding-bottom: 5px;
+  border-radius: 2px;
+}
+
+/* 金额数字统一等宽数字（收拢既有声明 + 新增覆盖点） */
+#page-title,
+#month-label,
+.summary-value,
+.day-total,
+.record-amount,
+#quick-amount,
+#budget-input { font-variant-numeric: tabular-nums; }
+
+/* ---- 34.2 卡片入场微动画（0.25s fade + up） ----
+   fill-mode 用 backwards：动画结束后不锁定 transform，
+   桌面端 hover 上浮（第 16 节 .card:hover）不受影响；
+   prefers-reduced-motion 由第 17 节全局降级为瞬时 */
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.card { animation: cardIn 0.25s ease backwards; }
+
+/* ---- 34.3 统计卡标题：左侧 4px 主题色竖条 ---- */
+.card-title {
+  padding-left: 9px;
+  border-left: 4px solid var(--primary);
+  border-radius: 2px;
+  line-height: 1.3;
+}
+
+/* ---- 34.4 分类选中态：描边 glow + 呼吸感（reduced-motion 时自动停止） ---- */
+@keyframes catBreath {
+  0%, 100% { box-shadow: 0 0 0 2px var(--primary-glow); }
+  50%      { box-shadow: 0 0 0 5px var(--primary-glow); }
+}
+.cat-item.selected {
+  box-shadow: 0 0 0 2px var(--primary-glow);
+  animation: catBreath 2.4s ease-in-out infinite;
+}
+
+/* ---- 34.5 底部导航：active 顶部小胶囊指示（纯 CSS，不改 DOM） ---- */
+.tab { position: relative; }
+.tab.active::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--primary), var(--primary-bright));
+  box-shadow: 0 1px 4px rgba(0, 181, 120, 0.45);
+}
+
+/* ---- 34.6 快捷工具行：右对齐按钮行 ---- */
+.quick-tools-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+/* ---- 34.7 购物清单导入卡片 ---- */
+#shopping-text {
+  display: block;
+  width: 100%;
+  background: var(--bg-input);
+  border: 1.5px solid transparent;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-main);
+  outline: none;
+  resize: vertical;
+  min-height: 110px;
+  transition: border-color 0.18s, background 0.18s, box-shadow 0.18s;
+}
+#shopping-text:focus {
+  border-color: var(--primary);
+  background: #FFFFFF;
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+#shopping-text::placeholder { color: #B9C3BC; }
+
+.import-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+}
+.shopping-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary-deep);
+  font-variant-numeric: tabular-nums;
+}
+.import-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ---- 34.8 商品明细编辑（.items-form-row：label 上、编辑器下） ---- */
+.items-form-row { display: flex; flex-direction: column; }
+.items-editor { flex: 1; min-width: 0; }
+
+/* .item-row 由 JS 生成，约定子节点顺序：
+   input(商品名) → input(数量) → input(价格) → button.btn-icon(删除)，
+   不依赖额外类名；高度沿用全局输入风格覆盖为 38px */
+.item-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.item-row input {
+  height: 38px;
+  padding: 0 10px;
+  font-size: 14px;
+}
+.item-row input:nth-of-type(1) { flex: 1; min-width: 0; width: auto; }                 /* 商品名 */
+.item-row input:nth-of-type(2) { flex: 0 0 52px; width: 52px; padding: 0 6px; text-align: center; } /* 数量 */
+.item-row input:nth-of-type(3) { flex: 0 0 70px; width: 70px; }                        /* 价格 */
+.item-row .btn-icon { width: 32px; height: 32px; flex-shrink: 0; }
+
+.items-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+.items-sum {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary-deep);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- 34.9 流水条目里的 🧾 商品明细小徽标 ---- */
+.items-badge {
+  display: inline-block;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 1px 6px;
+  margin-left: 6px;
+  border-radius: 6px;
+  background: var(--primary-light);
+  color: var(--primary-deep);
+  font-weight: 600;
+  vertical-align: 1px;
+}
+
+/* ---- 34.10 滚动条（webkit）：细 / 圆角 / 半透明主题色 ---- */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 181, 120, 0.30);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(0, 181, 120, 0.50); }
+::-webkit-scrollbar-corner { background: transparent; }
+/* Firefox 渐进增强 */
+html { scrollbar-width: thin; scrollbar-color: rgba(0, 181, 120, 0.35) transparent; }
+
+/* ----------------------------------------------------------------------
+   34.11 深色模式 · data-theme="dark"（与第 30 节机制一致的新增覆盖）
+   ---------------------------------------------------------------------- */
+/* 流水分割线：深色渐隐线 */
+body[data-theme="dark"] .record-item + .record-item {
+  border-image: linear-gradient(90deg, rgba(0, 181, 120, 0) 0%, #2C3833 16%, #2C3833 84%, rgba(0, 181, 120, 0) 100%) 1;
+}
+/* 图标底：深色微渐变 */
+body[data-theme="dark"] .record-icon,
+body[data-theme="dark"] .mcat-icon {
+  background: linear-gradient(180deg, #2A3630, #222C27);
+}
+/* 分类图标小底：深色下加大绿色透明度 */
+body[data-theme="dark"] .cat-icon {
+  background: linear-gradient(180deg, rgba(0, 181, 120, 0.18), rgba(0, 181, 120, 0.08));
+}
+/* 空状态：深色底 + 提亮文字 */
+body[data-theme="dark"] .empty-tip {
+  color: #8FA096;
+  background: linear-gradient(180deg, rgba(0, 181, 120, 0.09), rgba(0, 181, 120, 0.04));
+}
+/* 图表容器：深色淡绿内衬 */
+body[data-theme="dark"] .chart-box {
+  background: linear-gradient(180deg, rgba(0, 181, 120, 0.08), rgba(0, 181, 120, 0.03));
+}
+/* 购物清单 textarea：focus 深色底 / placeholder 调暗 */
+body[data-theme="dark"] #shopping-text:focus { background: #2A3630; }
+body[data-theme="dark"] #shopping-text::placeholder { color: #64756D; }
+
+/* ----------------------------------------------------------------------
+   34.12 深色模式 · 跟随系统（@media + data-theme="auto"，同 34.11）
+   ---------------------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  body[data-theme="auto"] .record-item + .record-item {
+    border-image: linear-gradient(90deg, rgba(0, 181, 120, 0) 0%, #2C3833 16%, #2C3833 84%, rgba(0, 181, 120, 0) 100%) 1;
+  }
+  body[data-theme="auto"] .record-icon,
+  body[data-theme="auto"] .mcat-icon {
+    background: linear-gradient(180deg, #2A3630, #222C27);
+  }
+  body[data-theme="auto"] .cat-icon {
+    background: linear-gradient(180deg, rgba(0, 181, 120, 0.18), rgba(0, 181, 120, 0.08));
+  }
+  body[data-theme="auto"] .empty-tip {
+    color: #8FA096;
+    background: linear-gradient(180deg, rgba(0, 181, 120, 0.09), rgba(0, 181, 120, 0.04));
+  }
+  body[data-theme="auto"] .chart-box {
+    background: linear-gradient(180deg, rgba(0, 181, 120, 0.08), rgba(0, 181, 120, 0.03));
+  }
+  body[data-theme="auto"] #shopping-text:focus { background: #2A3630; }
+  body[data-theme="auto"] #shopping-text::placeholder { color: #64756D; }
+}
+
+/* ----------------------------------------------------------------------
+   35. 饮食页（今日概览 / 记一餐 / 当日记录 / 健康建议 / 热量预算）
+   全部引用设计变量，浅色 / 深色（dark 与 auto）自动适配，无需单独覆盖。
+   ---------------------------------------------------------------------- */
+
+/* ---- 35.1 今日概览：热量环 + 三大营养素 ---- */
+#diet-date { width: 132px; }
+
+.diet-overview-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.diet-ring-wrap {
+  position: relative;
+  width: 128px;
+  height: 128px;
+  flex-shrink: 0;
+}
+
+.diet-ring { width: 100%; height: 100%; display: block; }
+
+.diet-ring .ring-bg {
+  fill: none;
+  stroke: var(--track);
+  stroke-width: 11;
+}
+
+.diet-ring .ring-fg {
+  fill: none;
+  stroke-width: 11;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  transition: stroke-dashoffset 0.5s cubic-bezier(0.25, 0.8, 0.35, 1), stroke 0.3s;
+}
+
+.diet-ring-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  text-align: center;
+}
+.diet-ring-center b {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.diet-ring-center span {
+  font-size: 10px;
+  color: var(--text-grey);
+  line-height: 1.3;
+  padding: 0 10px;
+}
+
+.diet-ring-side {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+}
+
+.diet-status {
+  font-size: 13px;
+  color: var(--text-sub);
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+}
+.diet-status b { color: var(--primary-deep); }
+.diet-status .over-text { color: var(--danger); font-weight: 600; }
+
+.macro-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.macro-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.macro-name {
+  flex: 0 0 44px;
+  color: var(--text-sub);
+}
+.macro-track {
+  flex: 1;
+  min-width: 0;
+  height: 8px;
+  background: var(--track);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.macro-bar {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.45s cubic-bezier(0.25, 0.8, 0.35, 1);
+}
+.bar-protein { background: #42A5F5; }
+.bar-fat     { background: #AB47BC; }
+.bar-carb    { background: #FFA726; }
+.macro-val {
+  flex: 0 0 78px;
+  text-align: right;
+  color: var(--text-grey);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---- 35.2 记一餐：搜索 / 快捷食物 / 结果列表 ---- */
+.food-search-row input { width: 100%; }
+
+.food-quick-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.food-chip {
+  padding: 6px 13px;
+  border-radius: 999px;
+  background: var(--bg-input);
+  border: 1px solid transparent;
+  font-size: 13px;
+  color: var(--text-sub);
+  transition: background 0.15s, color 0.15s;
+}
+.food-chip:active { background: var(--primary-light); color: var(--primary-deep); }
+
+.food-result-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  margin-top: 8px;
+  background: var(--bg-input);
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.food-result-item:active { background: var(--surface-soft); }
+.food-result-item.selected {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+.fri-name { font-size: 14px; font-weight: 600; color: var(--text-main); }
+.fri-meta { font-size: 12px; color: var(--text-grey); }
+
+.food-noresult {
+  margin-top: 10px;
+  padding: 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-grey);
+  line-height: 1.6;
+}
+
+/* ---- 35.3 记一餐：选中食物面板 ---- */
+.pick-panel {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.pick-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pick-name { font-size: 15px; font-weight: 700; color: var(--text-main); }
+.pick-cat { flex: 1; min-width: 0; font-size: 12px; color: var(--text-grey); }
+.pick-clear {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-grey);
+  font-size: 13px;
+}
+.pick-clear:active { background: var(--primary-light); color: var(--primary-deep); }
+
+.pick-info {
+  margin: 6px 0 12px;
+  font-size: 12px;
+  color: var(--text-grey);
+  line-height: 1.5;
+}
+
+.pick-meal-toggle { margin-bottom: 12px; }
+
+.pick-units {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.unit-chip {
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--text-sub);
+  font-variant-numeric: tabular-nums;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.unit-chip.selected {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary-deep);
+  font-weight: 600;
+}
+
+.pick-count-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+#pick-count {
+  width: 92px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.pick-unit-label { font-size: 13px; color: var(--text-sub); flex-shrink: 0; }
+.pick-preview {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary-deep);
+  font-variant-numeric: tabular-nums;
+}
+#pick-add-btn { width: 100%; }
+
+.food-custom-toggle { margin-top: 12px; }
+
+/* 自定义食物表单 */
+.cf-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 12px;
+}
+.cf-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* ---- 35.4 当日记录 ---- */
+.meal-group { margin-top: 4px; }
+.meal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 2px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-sub);
+}
+.meal-kcal {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-grey);
+  font-variant-numeric: tabular-nums;
+}
+.diet-entry-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 2px;
+}
+.diet-entry-row + .diet-entry-row { border-top: 1px solid var(--line); }
+.der-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.der-meta {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-grey);
+  font-variant-numeric: tabular-nums;
+}
+.der-del { flex-shrink: 0; opacity: 0.55; }
+.der-del:active { opacity: 1; }
+
+/* ---- 35.5 健康建议 ---- */
+.advice-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.advice-icon { flex-shrink: 0; font-size: 16px; line-height: 1.4; }
+.advice-text { flex: 1; min-width: 0; }
+
+.advice-item.tone-good {
+  background: var(--primary-light);
+  color: var(--primary-deep);
+  font-weight: 500;
+}
+.advice-item.tone-warn {
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
+.advice-item.tone-info {
+  background: var(--bg-input);
+  color: var(--text-sub);
+}
+
+/* ---- 35.6 个人资料 / 热量预算 ---- */
+.profile-chips {
+  display: flex;
+  gap: 8px;
+}
+.pchip {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 11px 6px;
+  background: var(--bg-input);
+  border-radius: 12px;
+  text-align: center;
+}
+.pchip-label { font-size: 11px; color: var(--text-grey); }
+.pchip b {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+}
+
+.profile-meta {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-grey);
+  line-height: 1.7;
+}
+
+.dp-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 12px;
+}
+.dp-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+#dp-activity {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
+  background: var(--bg-input);
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text-main);
+  appearance: none;
+  -webkit-appearance: none;
+}
+#dp-activity:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--primary-glow);
 }
