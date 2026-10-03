@@ -58,6 +58,9 @@ var Store = (function () {
   /** 当前绑定的账户名（null 表示未绑定，用旧版键） */
   var _username = null;
 
+  /** 加密账本但未解锁时置 true：内存以空数据运行，但绝不写盘覆盖原数据 */
+  var _locked = false;
+
   /** 当前生效的 localStorage 键名 */
   function storageKey() {
     return _username ? 'jz_data_v1::' + _username : 'jz_data_v1';
@@ -71,6 +74,7 @@ var Store = (function () {
   function setUser(username) {
     _username = username || null;
     _data = null;
+    _locked = false;
   }
 
   /** 当前绑定的账户名，未绑定时返回 null */
@@ -790,17 +794,50 @@ var Store = (function () {
   }
 
   /**
-   * 把内存缓存写入 localStorage（失败只警告，不抛异常）
-   * @returns {boolean} 是否写入成功
+   * 把内存缓存写入 localStorage（失败只警告，不抛异常）。
+   * 账本加密开启时先 AES-GCM 加密再写（异步），多次写入按调用顺序排队，后写覆盖先写。
+   * @returns {boolean} 是否已受理本次写入（加密时为乐观返回，真正落盘见 flush()）
    */
+  var writeChain = Promise.resolve();
+
   function persist() {
+    if (_locked) return false;               // 加密账本未解锁：只读不写，保护原数据
+    var json;
     try {
-      localStorage.setItem(storageKey(), JSON.stringify(_data));
+      json = JSON.stringify(_data);
+    } catch (e) {
+      console.warn('[core.js] 数据序列化失败：', e);
+      return false;
+    }
+    // 加密套件：返回 Promise<信封字符串> 表示需要加密；null 表示明文
+    var enc = (typeof Auth !== 'undefined' && Auth.encryptFor) ? Auth.encryptFor(json) : null;
+    if (enc && typeof enc.then === 'function') {
+      var key = storageKey();
+      writeChain = writeChain
+        .then(function () { return enc; })
+        .then(function (envelope) {
+          try { localStorage.setItem(key, envelope || json); } catch (e) { console.warn('[core.js] 写入 localStorage 失败：', e); }
+        })
+        .catch(function () { /* 单次失败不阻塞后续写入 */ });
+      return true;
+    }
+    try {
+      localStorage.setItem(storageKey(), json);
       return true;
     } catch (e) {
       console.warn('[core.js] 写入 localStorage 失败：', e);
       return false;
     }
+  }
+
+  /** 等待队列中的加密写入全部落盘（换钥匙 / 开关加密等关键节点调用） */
+  function flush() {
+    return writeChain;
+  }
+
+  /** 用当前存储形态把整份数据重写一遍（切换加密开关 / 换密码后调用） */
+  function repersist() {
+    return persist();
   }
 
   /**
@@ -851,15 +888,31 @@ var Store = (function () {
    */
   function load() {
     var raw = null;
-    try {
-      raw = localStorage.getItem(storageKey());
-    } catch (e) {
-      console.warn('[core.js] 读取 localStorage 失败，将使用默认数据：', e);
+    // 加密账户：登录/解锁时 auth.js 已把账本解密暂存，这里直接取明文（load 保持同步）
+    if (typeof Auth !== 'undefined' && Auth.peekPendingPlain) {
+      var plain = Auth.peekPendingPlain();
+      if (plain != null) raw = plain;
+    }
+    if (raw == null) {
+      try {
+        raw = localStorage.getItem(storageKey());
+      } catch (e) {
+        console.warn('[core.js] 读取 localStorage 失败，将使用默认数据：', e);
+      }
     }
 
     if (raw) {
       try {
-        _data = sanitizeData(JSON.parse(raw));
+        var parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && parsed.jzEnc === 1) {
+          // 加密账本但本次没有钥匙（异常路径，正常流程登录前就会被解锁门拦住）：
+          // 以空数据运行且禁止写盘，原密文原样保留，绝不覆盖。
+          console.warn('[core.js] 账本已加密且未解锁，本次不读取也不覆盖原数据');
+          _data = defaultData();
+          _locked = true;
+          return cloneData(_data);
+        }
+        _data = sanitizeData(parsed);
       } catch (e) {
         console.warn('[core.js] 本地数据解析失败，已重置为默认数据：', e);
         _data = defaultData();
@@ -2043,6 +2096,8 @@ var Store = (function () {
     // 加载与保存
     load: load,
     save: save,
+    repersist: repersist,
+    flush: flush,
     // 多账户数据隔离
     setUser: setUser,
     storageUser: storageUser,

@@ -101,7 +101,7 @@ function switchView(view) {
   else if (view === 'stats') renderStats();
   else if (view === 'budget') renderBudget();
   else if (view === 'diet') DietUI.render();
-  else if (view === 'manage') { renderThemeToggle(); renderAccentToggle(); renderCategoryManage(); renderBackupHint(); }
+  else if (view === 'manage') { renderThemeToggle(); renderAccentToggle(); renderEncRow(); renderCategoryManage(); renderBackupHint(); }
 
   if (main) main.scrollTop = viewScrollTop[view] || 0;     // 恢复该页上次滚动位置
 }
@@ -235,6 +235,61 @@ function renderAccentToggle() {
   if (name) name.textContent = ACCENT_NAMES[PREF.accent] || ACCENT_NAMES.mint;
   var desc = $('accent-desc');
   if (desc) desc.textContent = ACCENT_DESC[PREF.accent] || '';
+}
+
+/* ================= 账本加密（管理页账户卡片 + 设置弹窗） ================= */
+
+/** 刷新账户卡片里的加密状态行 */
+function renderEncRow() {
+  var stateEl = $('enc-state');
+  var btn = $('enc-toggle-btn');
+  if (!stateEl || !btn) return;
+  var on = Auth.isEncEnabled();
+  stateEl.textContent = on ? '已开启 · 打开需解锁' : '未开启 · 明文存本机';
+  stateEl.classList.toggle('on', on);
+  btn.textContent = on ? '关闭' : '开启';
+}
+
+/** 打开加密设置弹窗（按当前状态决定是「开启」还是「关闭」） */
+function openEncModal() {
+  var on = Auth.isEncEnabled();
+  $('enc-modal-title').textContent = on ? '关闭账本加密' : '开启账本加密';
+  $('enc-modal-desc').textContent = on
+    ? '关闭后数据恢复为本机明文存储，打开应用不再需要解锁。请输入当前密码确认。'
+    : '开启后每次打开小账本都需输入密码解锁；忘记密码将无法恢复数据，建议先在管理页导出备份。';
+  $('enc-modal-warn').textContent = on ? '' : '⚠️ 请确认你已记住当前密码，并已做好备份。';
+  $('enc-confirm-btn').textContent = on ? '关闭加密' : '开启加密';
+  $('enc-pw-input').value = '';
+  $('modal-enc').classList.remove('hidden');
+  $('enc-pw-input').focus();
+}
+
+/** 弹窗确认：开启 / 关闭账本加密（成功后把整份数据按新形态回写） */
+function encConfirm() {
+  var pw = $('enc-pw-input').value;
+  if (!pw) { toast('请输入当前密码'); return; }
+  var btn = $('enc-confirm-btn');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  var wasOn = Auth.isEncEnabled();
+  var action = wasOn ? Auth.disableEncryption(pw) : Auth.enableEncryption(pw);
+  action
+    .then(function () { return Store.flush(); })     // 先让先前的写入落定
+    .then(function () {
+      Store.repersist();                             // 以新的存储形态（密文/明文）回写整份数据
+      return Store.flush();
+    })
+    .then(function () {
+      btn.disabled = false;
+      $('modal-enc').classList.add('hidden');
+      renderEncRow();
+      toast(wasOn ? '已关闭加密，数据恢复明文 ✓' : '已开启加密 ✓ 下次打开需解锁');
+    })
+    .catch(function (e) {
+      btn.disabled = false;
+      renderEncRow();
+      toast(e.message || '操作失败，请重试');
+    });
 }
 
 /** 主题变化后刷新当前页里吃主题色的渲染（图表等） */
@@ -439,6 +494,8 @@ function animateCountUps(container) {
 }
 
 function renderStats() {
+  try { Insights.render(currentYm); }   // 顶部智能洞察卡（失败不影响报表主体）
+  catch (e) { console.warn('[app.js] 洞察卡渲染失败：', e); }
   var s = Store.getMonthSummary(currentYm);
 
   $('stat-summary').innerHTML =
@@ -1101,6 +1158,14 @@ function bindEvents() {
     $('modal-catbudget').classList.add('hidden');
   });
 
+  // 账本加密：开关按钮 + 设置弹窗
+  $('enc-toggle-btn').addEventListener('click', openEncModal);
+  $('enc-confirm-btn').addEventListener('click', encConfirm);
+  $('enc-pw-input').addEventListener('keydown', function (e) { if (e.key === 'Enter') encConfirm(); });
+  $('enc-cancel-btn').addEventListener('click', function () {
+    $('modal-enc').classList.add('hidden');
+  });
+
   // 主题：明暗
   $('theme-toggle').addEventListener('click', function (e) {
     var btn = e.target.closest('.type-btn');
@@ -1196,14 +1261,32 @@ function bindEvents() {
     var newPw = $('pw-new').value;
     if (newPw !== $('pw-new2').value) { toast('两次输入的新密码不一致'); return; }
     $('pw-save-btn').disabled = true;
-    Auth.changePassword($('pw-old').value, newPw).then(function () {
-      $('pw-save-btn').disabled = false;
-      $('modal-password').classList.add('hidden');
-      toast('密码已修改 ✓');
-    }).catch(function (e) {
-      $('pw-save-btn').disabled = false;
-      toast(e.message);
-    });
+    var rekeyed = false;   // 加密账户：数据是否已用新钥匙重写（失败回滚用）
+    Auth.verifyPassword($('pw-old').value)
+      .then(function (ok) {
+        if (!ok) throw new Error('旧密码不正确');
+        return Auth.rekeyData(newPw);          // 未加密账户返回 false，直接跳过
+      })
+      .then(function (did) {
+        rekeyed = did;
+        if (!did) return null;
+        Store.repersist();                     // 先用新钥匙把整份数据回写落盘
+        return Store.flush();
+      })
+      .then(function () { return Auth.replacePassword(newPw); })
+      .then(function () {
+        $('pw-save-btn').disabled = false;
+        $('modal-password').classList.add('hidden');
+        toast('密码已修改 ✓');
+      })
+      .catch(function (e) {
+        if (rekeyed) {                         // 回滚：数据写回旧钥匙，保证旧密码仍可解锁
+          Auth.restoreDataKey();
+          Store.repersist();
+        }
+        $('pw-save-btn').disabled = false;
+        toast(e.message || '修改失败');
+      });
   });
 
   // 点击遮罩关闭所有弹窗
@@ -1249,9 +1332,25 @@ function setAuthMode(mode) {
 function showAuth(mode) {
   $('app').classList.add('hidden');
   $('auth-screen').classList.remove('hidden');
-  $('auth-username').value = '';
   $('auth-password').value = '';
   $('auth-password2').value = '';
+  if (mode === 'unlock') {
+    // 加密账本解锁：锁死用户名、隐藏注册页签与确认密码，只留密码框
+    authMode = 'unlock';
+    $('auth-username').value = Auth.currentUser() || '';
+    $('auth-username').setAttribute('readonly', 'readonly');
+    $('auth-tabs').classList.add('hidden');
+    $('auth-hint').classList.add('hidden');
+    $('auth-unlock-hint').classList.remove('hidden');
+    $('auth-password2-row').classList.add('hidden');
+    $('auth-submit-btn').textContent = '解 锁';
+    return;
+  }
+  $('auth-username').removeAttribute('readonly');
+  $('auth-username').value = '';
+  $('auth-tabs').classList.remove('hidden');
+  $('auth-hint').classList.remove('hidden');
+  $('auth-unlock-hint').classList.add('hidden');
   setAuthMode(mode || 'login');
 }
 
@@ -1426,9 +1525,14 @@ function boot() {
   applyResolvedTheme(true);   // 登录前先按系统深浅上主题，避免深色用户白闪
   bindEvents();
   DietUI.init(); // 饮食页事件只绑一次（元素为静态 HTML，与登录状态无关）
+  Insights.init(); // 统计页洞察轮播只绑一次
   registerServiceWorker();
   var user = Auth.currentUser();
   if (user) {
+    if (Auth.isLocked(user)) {           // 账本已加密：先解锁再进入
+      showAuth('unlock');
+      return;
+    }
     $('auth-screen').classList.add('hidden');
     $('app').classList.remove('hidden');
     startApp(user);

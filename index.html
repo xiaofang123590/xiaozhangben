@@ -37,7 +37,7 @@
     <div class="auth-logo">📒</div>
     <h1 class="auth-title">小账本</h1>
     <p class="auth-sub">本地记账 · 多账户各自独立</p>
-    <div class="auth-tabs">
+    <div class="auth-tabs" id="auth-tabs">
       <button type="button" id="auth-tab-login" class="auth-tab active">登录</button>
       <button type="button" id="auth-tab-register" class="auth-tab">注册</button>
     </div>
@@ -45,7 +45,8 @@
     <div class="form-row"><label class="form-label">密码</label><input id="auth-password" type="password" maxlength="32" placeholder="至少 4 位" autocomplete="current-password"></div>
     <div class="form-row hidden" id="auth-password2-row"><label class="form-label">确认密码</label><input id="auth-password2" type="password" maxlength="32" placeholder="再输一遍" autocomplete="new-password"></div>
     <button id="auth-submit-btn" class="btn-primary auth-submit">登 录</button>
-    <p class="hint auth-hint">账号仅保存在本机浏览器，用于多人共用设备时账本互相隔离，不能跨设备同步。</p>
+    <p class="hint auth-hint" id="auth-hint">账号仅保存在本机浏览器，用于多人共用设备时账本互相隔离，不能跨设备同步。</p>
+    <p class="hint auth-hint hidden" id="auth-unlock-hint">本机账本已加密 · 输入密码解锁。忘记密码将无法恢复数据。</p>
   </div>
 </div>
 
@@ -139,6 +140,10 @@
 
     <!-- ============ 统计页 ============ -->
     <section id="view-stats" class="view hidden">
+      <div class="card insight-card">
+        <div class="insight-track" id="insight-track"></div>
+        <div class="insight-dots" id="insight-dots"></div>
+      </div>
       <div class="card" id="stat-summary"></div>
       <div class="card">
         <div class="card-head">
@@ -284,11 +289,18 @@
       <div class="card">
         <h3 class="card-title">账户</h3>
         <div class="account-row"><span class="account-label">当前用户</span><b id="account-name">未登录</b></div>
+        <div class="account-row enc-row">
+          <span class="account-label">账本加密</span>
+          <span class="enc-side">
+            <b id="enc-state" class="enc-state">未开启</b>
+            <button id="enc-toggle-btn" class="btn-secondary btn-sm">开启</button>
+          </span>
+        </div>
         <div class="btn-col">
           <button id="change-pw-btn" class="btn-secondary">🔑 修改密码</button>
           <button id="logout-btn" class="btn-secondary">🚪 退出登录</button>
         </div>
-        <p class="hint">退出后账本数据仍保留在本机，重新登录即可查看。</p>
+        <p class="hint">退出后账本数据仍保留在本机，重新登录即可查看。开启账本加密后，数据以密文存储、每次打开需解锁。</p>
       </div>
       <div class="card">
         <h3 class="card-title">外观</h3>
@@ -416,6 +428,23 @@
   </div>
 </div>
 
+<!-- 账本加密设置弹窗 -->
+<div id="modal-enc" class="modal hidden">
+  <div class="modal-mask" data-close="1"></div>
+  <div class="modal-body">
+    <h3 class="modal-title" id="enc-modal-title">开启账本加密</h3>
+    <p class="hint" id="enc-modal-desc">开启后每次打开小账本都需输入密码解锁；密码忘记将无法恢复数据，建议先导出备份。</p>
+    <div class="form-row"><label class="form-label">当前密码</label><input id="enc-pw-input" type="password" maxlength="32" autocomplete="current-password"></div>
+    <p class="hint over-text" id="enc-modal-warn"></p>
+    <div class="modal-actions">
+      <span class="modal-actions-right">
+        <button id="enc-cancel-btn" class="btn-secondary">取消</button>
+        <button id="enc-confirm-btn" class="btn-primary">开启加密</button>
+      </span>
+    </div>
+  </div>
+</div>
+
 <!-- 修改密码弹窗 -->
 <div id="modal-password" class="modal hidden">
   <div class="modal-mask" data-close="1"></div>
@@ -472,6 +501,7 @@
 <script src="js/diet.js"></script>
 <script src="js/diet-nlp.js"></script>
 <script src="js/charts.js"></script>
+<script src="js/insights.js"></script>
 <script src="js/diet-ui.js"></script>
 <script src="js/liquid-glass.js"></script>
 <script src="js/app.js"></script>

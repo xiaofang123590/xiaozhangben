@@ -6,7 +6,7 @@
  *       在线打开永远是最新版，离线照常可用，从根上避免「发版后手机读到旧代码」。
  * 注意：CACHE_VERSION 仅用于旧缓存清理；更新内容后习惯性 +1 即可，不再影响新旧。
  */
-var CACHE_VERSION = 'xzb-v16';
+var CACHE_VERSION = 'xzb-v18';
 
 var PRECACHE = [
   './',
@@ -22,6 +22,7 @@ var PRECACHE = [
   './js/diet.js',
   './js/diet-nlp.js',
   './js/charts.js',
+  './js/insights.js',
   './js/diet-ui.js',
   './js/liquid-glass.js',
   './js/app.js',
