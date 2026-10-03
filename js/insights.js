@@ -31,7 +31,18 @@ var Insights = (function () {
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
-  function fmt(n) { return Store.formatAmount(n); }
+  function fmt(n) { return Store.formatMoney(n); }
+
+  /**
+   * 分类图标标签：内置分类用线性图标（颜色跟随洞察卡 tone，由 CSS 决定），
+   * 用户自建分类或改过图标的内置分类保留 emoji。
+   * @param {{id?:string, categoryId?:string, icon:string}} cat
+   */
+  function catIcon(cat) {
+    var name = Store.categoryIconName({ id: cat.id || cat.categoryId, icon: cat.icon, custom: false });
+    if (name && window.Icons && Icons.has(name)) return Icons.svg(name, 'ic-cat');
+    return esc(cat.icon || '🏷️');
+  }
 
   /** '2026-10' → '2026-09' */
   function prevYmOf(ym) {
@@ -146,14 +157,14 @@ var Insights = (function () {
       var hot = cbStatus[0];   // 已按使用比例降序
       if (hot.level === 'over') {
         out.push({
-          icon: esc(hot.icon), tone: 'warn',
+          icon: catIcon(hot), tone: 'warn',
           title: '「' + esc(hot.name) + '」已超分类预算 ¥' + fmt(hot.spent - hot.budget),
           desc: '已用 ¥' + fmt(hot.spent) + ' / ¥' + fmt(hot.budget) +
                 '（' + hot.usedPct + '%）'
         });
       } else if (hot.level === 'warn') {
         out.push({
-          icon: esc(hot.icon), tone: 'warn',
+          icon: catIcon(hot), tone: 'warn',
           title: '「' + esc(hot.name) + '」已用掉 ' + hot.usedPct + '% 分类预算',
           desc: '还剩 ¥' + fmt(hot.remaining) + '，本月才过 ' +
                 (isCur ? todayDay : daysInYm(ym)) + ' 天'
@@ -203,7 +214,7 @@ var Insights = (function () {
       var topCat = sum.byCategory[0];
       var share = sum.expense > 0 ? Math.round(topCat.total / sum.expense * 100) : 0;
       out.push({
-        icon: esc(topCat.icon), tone: 'neutral',
+        icon: catIcon(topCat), tone: 'neutral',
         title: esc(topCat.name) + '是本月最大的开销',
         desc: '¥' + fmt(topCat.total) + ' · 占本月支出的 ' + share + '%'
       });
@@ -220,12 +231,12 @@ var Insights = (function () {
       if (Math.abs(d) < 50) continue;                  // 变化太小不打扰
       if (Math.abs(d) / prev < 0.3) continue;
       if (!best || Math.abs(d) > Math.abs(best.d)) {
-        best = { name: c.name, icon: c.icon, cur: cur, prev: prev, d: d };
+        best = { id: c.id, name: c.name, icon: c.icon, cur: cur, prev: prev, d: d };
       }
     }
     if (best) {
       out.push({
-        icon: esc(best.icon), tone: best.d > 0 ? 'warn' : 'good',
+        icon: catIcon(best), tone: best.d > 0 ? 'warn' : 'good',
         title: '「' + esc(best.name) + '」比上月同期' + (best.d > 0 ? '多花' : '少花') +
                ' ¥' + fmt(Math.abs(best.d)),
         desc: '¥' + fmt(best.prev) + ' → ¥' + fmt(best.cur)

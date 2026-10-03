@@ -17,6 +17,8 @@
 </head>
 <body>
 
+<script src="js/icons.js"></script>
+
 <script>
 /* 首帧前先按系统深浅设置 data-mode，避免深色用户看到白闪（登录后 app.js 按账户偏好覆盖） */
 (function () {
@@ -34,7 +36,7 @@
 <!-- 登录/注册界面（未登录时显示，由 app.js 控制） -->
 <div id="auth-screen" class="hidden">
   <div class="auth-card">
-    <div class="auth-logo">📒</div>
+    <div class="auth-logo" aria-hidden="true">记</div>
     <h1 class="auth-title">小账本</h1>
     <p class="auth-sub">本地记账 · 多账户各自独立</p>
     <div class="auth-tabs" id="auth-tabs">
@@ -60,9 +62,9 @@
   <header id="app-header">
     <h1 id="page-title">记账</h1>
     <div id="month-nav" class="hidden">
-      <button id="month-prev" class="month-btn" aria-label="上个月">‹</button>
+      <button id="month-prev" class="month-btn" aria-label="上个月"><svg class="ic ic-sm"><use href="#i-chevron-left"></use></svg></button>
       <span id="month-label">2026年10月</span>
-      <button id="month-next" class="month-btn" aria-label="下个月">›</button>
+      <button id="month-next" class="month-btn" aria-label="下个月"><svg class="ic ic-sm"><use href="#i-chevron-right"></use></svg></button>
     </div>
   </header>
 
@@ -70,6 +72,26 @@
 
     <!-- ============ 记账页 ============ -->
     <section id="view-record" class="view">
+      <!-- 英雄卡：本月概览（数字与图形全部由 app.js 的 renderHero 渲染） -->
+      <div class="card hero-card" id="hero-card">
+        <div class="hero-top">
+          <div class="hero-main">
+            <div class="hero-label" id="hero-label">本月支出</div>
+            <div class="hero-amount">
+              <span class="hero-cur">¥</span><span id="hero-expense">0.00</span>
+            </div>
+            <div class="hero-delta hidden" id="hero-delta"></div>
+          </div>
+          <div class="hero-side">
+            <div class="hero-side-item"><span class="hero-side-label">收入</span><span class="hero-side-value" id="hero-income">¥0.00</span></div>
+            <div class="hero-side-item"><span class="hero-side-label">结余</span><span class="hero-side-value" id="hero-balance">¥0.00</span></div>
+            <div class="hero-side-item"><span class="hero-side-label">笔数</span><span class="hero-side-value" id="hero-count">0</span></div>
+          </div>
+        </div>
+        <div class="hero-spark" id="hero-spark"></div>
+        <div class="hero-budget hidden" id="hero-budget"></div>
+      </div>
+
       <div class="card" id="quick-add-card">
         <div class="type-toggle" id="quick-type-toggle">
           <button type="button" class="type-btn active" data-type="expense">支出</button>
@@ -98,12 +120,12 @@
         </div>
         <p class="hint">自动识别时间、分类和金额，按回车也能解析；识别结果会填进上方表单，确认无误再点「记一笔」。</p>
         <button type="button" id="toggle-shopping-btn" class="row-entry">
-          <span class="row-entry-icon">🛒</span>
+          <span class="row-entry-icon"><svg class="ic ic-cat"><use href="#i-cart"></use></svg></span>
           <span class="row-entry-main">
             <span class="row-entry-title">导入购物清单</span>
             <span class="row-entry-sub">粘贴多行商品与小计，一次记成带明细的账单</span>
           </span>
-          <span class="row-entry-arrow">›</span>
+          <span class="row-entry-arrow"><svg class="ic ic-sm"><use href="#i-chevron-right"></use></svg></span>
         </button>
       </div>
 
@@ -134,8 +156,18 @@
       </div>
 
       <div id="record-list"></div>
-      <div id="record-empty" class="empty-tip hidden">这个月还没有记录，先记一笔吧 ~</div>
-      <div id="search-empty" class="empty-tip hidden">没有匹配的记录</div>
+      <div id="record-empty" class="empty-tip empty-lg hidden">
+        <span class="empty-art"><svg class="ic"><use href="#i-notebook-pen"></use></svg></span>
+        <p class="empty-title">这个月还没有记录</p>
+        <p class="empty-sub">记下第一笔，明细和统计就都有了</p>
+        <button type="button" class="btn-primary btn-sm" data-empty-act="focus-amount">记一笔</button>
+      </div>
+      <div id="search-empty" class="empty-tip empty-lg hidden">
+        <span class="empty-art"><svg class="ic"><use href="#i-search"></use></svg></span>
+        <p class="empty-title">没有匹配的记录</p>
+        <p class="empty-sub">换个关键词，或把范围切到「全部」试试</p>
+        <button type="button" class="btn-secondary btn-sm" data-empty-act="clear-search">清空搜索</button>
+      </div>
     </section>
 
     <!-- ============ 统计页 ============ -->
@@ -154,27 +186,28 @@
           </div>
         </div>
         <div class="chart-box"><canvas id="pie-chart"></canvas></div>
-        <div id="pie-empty" class="empty-tip hidden">本月暂无支出数据</div>
+        <div id="pie-legend" class="pie-legend"></div>
+        <div id="pie-empty" class="empty-tip empty-icon hidden"><span class="empty-art"><svg class="ic"><use href="#i-stats"></use></svg></span>本月暂无支出数据</div>
       </div>
       <div class="card">
         <h3 class="card-title">每日趋势</h3>
         <div class="chart-box"><canvas id="trend-chart"></canvas></div>
-        <div id="trend-empty" class="empty-tip hidden">本月暂无数据</div>
+        <div id="trend-empty" class="empty-tip empty-icon hidden"><span class="empty-art"><svg class="ic"><use href="#i-chart-line"></use></svg></span>本月暂无数据</div>
       </div>
       <div class="card">
         <h3 class="card-title">近 30 天走势</h3>
         <div class="chart-box"><canvas id="line-chart"></canvas></div>
-        <div id="line-empty" class="empty-tip hidden">暂无数据</div>
+        <div id="line-empty" class="empty-tip empty-icon hidden"><span class="empty-art"><svg class="ic"><use href="#i-chart-line"></use></svg></span>暂无数据</div>
       </div>
       <div class="card">
         <h3 class="card-title">近 6 个月</h3>
         <div class="chart-box"><canvas id="month-chart"></canvas></div>
-        <div id="month-empty" class="empty-tip hidden">暂无数据</div>
+        <div id="month-empty" class="empty-tip empty-icon hidden"><span class="empty-art"><svg class="ic"><use href="#i-chart-line"></use></svg></span>暂无数据</div>
       </div>
       <div class="card">
         <h3 class="card-title">本月 vs 上月</h3>
         <div id="compare-list"></div>
-        <div id="compare-empty" class="empty-tip hidden">上月暂无数据，无法对比</div>
+        <div id="compare-empty" class="empty-tip empty-icon hidden"><span class="empty-art"><svg class="ic"><use href="#i-chart-line"></use></svg></span>上月暂无数据，无法对比</div>
       </div>
     </section>
 
@@ -196,15 +229,15 @@
       <div class="card">
         <div class="card-head">
           <h3 class="card-title">分类预算</h3>
-          <button id="add-catbudget-btn" class="btn-secondary btn-sm">+ 设置分类预算</button>
+          <button id="add-catbudget-btn" class="btn-secondary btn-sm"><svg class="ic ic-sm"><use href="#i-plus"></use></svg>设置分类预算</button>
         </div>
         <div id="catbudget-list"></div>
-        <div id="catbudget-empty" class="empty-tip hidden">给容易超支的分类设个上限，比如餐饮、购物；点卡片可修改。</div>
+        <div id="catbudget-empty" class="empty-tip empty-icon hidden"><span class="empty-art"><svg class="ic"><use href="#i-budget"></use></svg></span>给容易超支的分类设个上限，比如餐饮、购物；点卡片可修改。</div>
       </div>
       <div class="card">
         <h3 class="card-title">本月支出构成</h3>
         <div id="budget-category-list"></div>
-        <div id="budget-cat-empty" class="empty-tip hidden">本月暂无支出数据</div>
+        <div id="budget-cat-empty" class="empty-tip empty-icon hidden"><span class="empty-art"><svg class="ic"><use href="#i-stats"></use></svg></span>本月暂无支出数据</div>
       </div>
     </section>
 
@@ -233,7 +266,7 @@
         <div id="food-search-results"></div>
         <div id="food-pick-panel"></div>
         <div id="diet-combos"></div>
-        <button id="custom-food-toggle-btn" class="btn-secondary btn-sm food-custom-toggle">＋ 自定义食物</button>
+        <button id="custom-food-toggle-btn" class="btn-secondary btn-sm food-custom-toggle"><svg class="ic ic-sm"><use href="#i-plus"></use></svg>自定义食物</button>
         <div id="custom-food-form" class="hidden">
           <div class="form-row"><label class="form-label">名称</label><input id="cf-name" type="text" maxlength="20" placeholder="如 妈妈牌红烧肉" autocomplete="off"></div>
           <div class="cf-grid">
@@ -254,8 +287,8 @@
       <div class="card">
         <h3 class="card-title" id="diet-entries-title">当日记录</h3>
         <div class="entries-tools hidden" id="diet-entries-tools">
-          <button id="diet-copy-prev-btn" class="btn-secondary btn-sm">📋 复制前一天</button>
-          <button id="diet-save-combo-btn" class="btn-secondary btn-sm">💾 存为组合</button>
+          <button id="diet-copy-prev-btn" class="btn-secondary btn-sm"><svg class="ic ic-sm"><use href="#i-copy"></use></svg>复制前一天</button>
+          <button id="diet-save-combo-btn" class="btn-secondary btn-sm"><svg class="ic ic-sm"><use href="#i-save"></use></svg>存为组合</button>
         </div>
         <div id="diet-entries-list"></div>
       </div>
@@ -270,7 +303,7 @@
       <div class="card">
         <h3 class="card-title">近 7 天热量</h3>
         <div class="chart-box chart-box-sm"><canvas id="diet-trend-chart"></canvas></div>
-        <div id="diet-trend-empty" class="empty-tip hidden">这 7 天还没有饮食记录</div>
+        <div id="diet-trend-empty" class="empty-tip empty-icon hidden"><span class="empty-art"><svg class="ic"><use href="#i-chart-line"></use></svg></span>这 7 天还没有饮食记录</div>
       </div>
 
       <!-- 个人资料与热量预算 -->
@@ -297,8 +330,8 @@
           </span>
         </div>
         <div class="btn-col">
-          <button id="change-pw-btn" class="btn-secondary">🔑 修改密码</button>
-          <button id="logout-btn" class="btn-secondary">🚪 退出登录</button>
+          <button id="change-pw-btn" class="btn-secondary"><svg class="ic ic-sm"><use href="#i-key"></use></svg>修改密码</button>
+          <button id="logout-btn" class="btn-secondary"><svg class="ic ic-sm"><use href="#i-logout"></use></svg>退出登录</button>
         </div>
         <p class="hint">退出后账本数据仍保留在本机，重新登录即可查看。开启账本加密后，数据以密文存储、每次打开需解锁。</p>
       </div>
@@ -318,7 +351,7 @@
       <div class="card">
         <div class="card-head">
           <h3 class="card-title">分类管理</h3>
-          <button id="add-category-btn" class="btn-secondary btn-sm">+ 新增分类</button>
+          <button id="add-category-btn" class="btn-secondary btn-sm"><svg class="ic ic-sm"><use href="#i-plus"></use></svg>新增分类</button>
         </div>
         <div id="category-manage-list"></div>
       </div>
@@ -326,9 +359,9 @@
         <h3 class="card-title">数据备份</h3>
         <div id="backup-hint" class="backup-hint hidden"></div>
         <div class="btn-col">
-          <button id="export-csv-btn" class="btn-secondary">📄 导出本月账单（CSV，Excel 可打开）</button>
-          <button id="export-json-btn" class="btn-secondary">💾 导出完整备份（JSON）</button>
-          <button id="import-json-btn" class="btn-secondary">♻️ 从备份恢复（JSON）</button>
+          <button id="export-csv-btn" class="btn-secondary"><svg class="ic ic-sm"><use href="#i-csv"></use></svg>导出本月账单（CSV，Excel 可打开）</button>
+          <button id="export-json-btn" class="btn-secondary"><svg class="ic ic-sm"><use href="#i-export"></use></svg>导出完整备份（JSON）</button>
+          <button id="import-json-btn" class="btn-secondary"><svg class="ic ic-sm"><use href="#i-import"></use></svg>从备份恢复（JSON）</button>
         </div>
         <input id="import-file-input" type="file" accept=".json,application/json" class="hidden">
         <p class="hint">数据仅保存在本机浏览器中，清除浏览器数据前请先导出备份。</p>
@@ -340,11 +373,11 @@
   <!-- 底部导航（.tab-indicator 为滑动胶囊指示器，位置由 JS 写入 --tab-index） -->
   <nav id="tab-bar">
     <span class="tab-indicator" aria-hidden="true"></span>
-    <button class="tab active" data-view="record"><span class="tab-icon">📝</span><span class="tab-label">记账</span></button>
-    <button class="tab" data-view="stats"><span class="tab-icon">📊</span><span class="tab-label">统计</span></button>
-    <button class="tab" data-view="budget"><span class="tab-icon">🎯</span><span class="tab-label">预算</span></button>
-    <button class="tab" data-view="diet"><span class="tab-icon">🥗</span><span class="tab-label">饮食</span></button>
-    <button class="tab" data-view="manage"><span class="tab-icon">⚙️</span><span class="tab-label">管理</span></button>
+    <button class="tab active" data-view="record"><svg class="ic tab-icon"><use href="#i-record"></use></svg><span class="tab-label">记账</span></button>
+    <button class="tab" data-view="stats"><svg class="ic tab-icon"><use href="#i-stats"></use></svg><span class="tab-label">统计</span></button>
+    <button class="tab" data-view="budget"><svg class="ic tab-icon"><use href="#i-budget"></use></svg><span class="tab-label">预算</span></button>
+    <button class="tab" data-view="diet"><svg class="ic tab-icon"><use href="#i-diet"></use></svg><span class="tab-label">饮食</span></button>
+    <button class="tab" data-view="manage"><svg class="ic tab-icon"><use href="#i-manage"></use></svg><span class="tab-label">管理</span></button>
   </nav>
 </div>
 
@@ -352,6 +385,7 @@
 <div id="modal-record" class="modal hidden">
   <div class="modal-mask" data-close="1"></div>
   <div class="modal-body">
+    <span class="modal-handle" aria-hidden="true"></span>
     <h3 class="modal-title">编辑记录</h3>
     <div class="type-toggle" id="edit-type-toggle">
       <button type="button" class="type-btn" data-type="expense">支出</button>
@@ -363,11 +397,18 @@
     <div class="form-row"><label class="form-label">备注</label><input id="edit-note" type="text" maxlength="30" autocomplete="off"></div>
     <div class="form-row items-form-row">
       <label class="form-label">商品明细</label>
-      <div class="items-editor">
-        <div id="edit-items-list"></div>
-        <div class="items-foot">
-          <span id="items-sum" class="items-sum hidden"></span>
-          <button type="button" id="add-item-btn" class="btn-secondary btn-sm">+ 加商品</button>
+      <div class="items-editor collapsed" id="items-editor">
+        <button type="button" class="items-toggle" id="items-toggle-btn" aria-expanded="false">
+          <span class="items-toggle-icon"><svg class="ic ic-sm"><use href="#i-receipt"></use></svg></span>
+          <span class="items-toggle-text" id="items-toggle-text">添加商品明细</span>
+          <svg class="ic ic-sm items-toggle-arrow"><use href="#i-chevron-right"></use></svg>
+        </button>
+        <div class="items-body">
+          <div id="edit-items-list"></div>
+          <div class="items-foot">
+            <span id="items-sum" class="items-sum hidden"></span>
+            <button type="button" id="add-item-btn" class="btn-secondary btn-sm"><svg class="ic ic-sm"><use href="#i-plus"></use></svg>加商品</button>
+          </div>
         </div>
       </div>
     </div>
@@ -385,6 +426,7 @@
 <div id="modal-category" class="modal hidden">
   <div class="modal-mask" data-close="1"></div>
   <div class="modal-body">
+    <span class="modal-handle" aria-hidden="true"></span>
     <h3 class="modal-title" id="modal-category-title">新增分类</h3>
     <div class="type-toggle" id="category-kind-toggle">
       <button type="button" class="type-btn active" data-kind="expense">支出分类</button>
@@ -405,6 +447,7 @@
 <div id="modal-catbudget" class="modal hidden">
   <div class="modal-mask" data-close="1"></div>
   <div class="modal-body">
+    <span class="modal-handle" aria-hidden="true"></span>
     <h3 class="modal-title">设置分类预算</h3>
     <div class="form-row">
       <label class="form-label">分类</label>
@@ -432,6 +475,7 @@
 <div id="modal-enc" class="modal hidden">
   <div class="modal-mask" data-close="1"></div>
   <div class="modal-body">
+    <span class="modal-handle" aria-hidden="true"></span>
     <h3 class="modal-title" id="enc-modal-title">开启账本加密</h3>
     <p class="hint" id="enc-modal-desc">开启后每次打开小账本都需输入密码解锁；密码忘记将无法恢复数据，建议先导出备份。</p>
     <div class="form-row"><label class="form-label">当前密码</label><input id="enc-pw-input" type="password" maxlength="32" autocomplete="current-password"></div>
@@ -449,6 +493,7 @@
 <div id="modal-password" class="modal hidden">
   <div class="modal-mask" data-close="1"></div>
   <div class="modal-body">
+    <span class="modal-handle" aria-hidden="true"></span>
     <h3 class="modal-title">修改密码</h3>
     <div class="form-row"><label class="form-label">旧密码</label><input id="pw-old" type="password" maxlength="32" autocomplete="current-password"></div>
     <div class="form-row"><label class="form-label">新密码</label><input id="pw-new" type="password" maxlength="32" placeholder="至少 4 位" autocomplete="new-password"></div>
@@ -466,6 +511,7 @@
 <div id="modal-combo" class="modal hidden">
   <div class="modal-mask" data-close="1"></div>
   <div class="modal-body">
+    <span class="modal-handle" aria-hidden="true"></span>
     <h3 class="modal-title">保存为组合</h3>
     <div class="form-row"><label class="form-label">组合名称</label><input id="combo-name-input" type="text" maxlength="20" placeholder="如 标准早餐" autocomplete="off"></div>
     <p class="hint">组合会记住这一餐的全部食物和份量，之后在「记一餐」里一键添加。</p>
@@ -479,6 +525,15 @@
 </div>
 
 <div id="toast" class="hidden"></div>
+
+<!-- 操作成功反馈：打勾描线 + 文案（记账 / 记餐 / 导入等保存动作，见 app.js 的 successFlash） -->
+<div id="success-flash" class="hidden" role="status" aria-live="polite">
+  <svg class="sf-svg" viewBox="0 0 24 24" aria-hidden="true">
+    <circle class="sf-ring" cx="12" cy="12" r="10" />
+    <path class="sf-tick" d="M7.6 12.4l3.1 3.1 5.7-6.6" />
+  </svg>
+  <span class="sf-text" id="success-text"></span>
+</div>
 
 <!-- 液态玻璃折射滤镜（仅 Chromium 的 backdrop-filter 会用到；位移贴图由 js/liquid-glass.js 按底栏实际尺寸生成） -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">

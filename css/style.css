@@ -21,17 +21,20 @@
   --primary-rgb:    0, 181, 120; /* 供 rgba(var(--primary-rgb), α) 生成主题色透明变体 */
   --on-primary:     #FFFFFF;   /* 主色按钮上的文字（墨玉金风格换深色） */
 
-  --text-main:  #333333;
-  --text-sub:   #666666;
-  --text-grey:  #999999;
-  --text-faint: #A9B2AC;
+  /* 文字灰阶：每一档都按 WCAG AA（4.5:1，白底）取值，层级靠字号/字重拉开 */
+  --text-main:  #333333;       /* 主文字        12.6:1 */
+  --text-sub:   #5A635E;       /* 次要文字       6.4:1 */
+  --text-grey:  #6E7973;       /* 弱化文字       4.6:1（标签 / 小计 / 备注） */
+  --text-faint: #717B75;       /* 更弱文字       4.5:1（同上，靠字号区分） */
+  --text-decor: #9AA39E;       /* 纯装饰箭头 / 点缀，不承载文字信息 */
+  --hint-text:  #67736B;       /* 说明文字       5.0:1（12px 小字要求更高） */
   --title-color: #223528;      /* 页面大标题（深色模式换浅色） */
 
   --line:     #F0F2F0;         /* 分割线 */
   --bg-input: #F6F8F6;         /* 输入框浅底 */
   --focus-bg: #FFFFFF;         /* 输入类 focus 底色（深色换微亮底） */
-  --placeholder: #B9C3BC;
-  --empty-text: #6F7D75;       /* 空状态文字（比 text-grey 再深一档保证对比度） */
+  --placeholder: #8F9A94;      /* 占位符（格式提示，非正文；已从 1.7:1 提到 2.7:1） */
+  --empty-text: #64706A;       /* 空状态文字       5.2:1 */
   --divider-soft: #E4ECE7;     /* 流水行两端渐隐分割线的中段色 */
 
   --surface:      #FFFFFF;     /* 主表面：卡片 / 弹窗面板 / 登录卡等 */
@@ -49,6 +52,16 @@
   --lens-tint:    rgba(var(--primary-rgb), 0.26);
   --lens-ring:    rgba(255, 255, 255, 0.60);
 
+  /* —— 语义色：与品牌主色解耦，换任何风格色板语义都不漂移 —— */
+  --positive:   #0C8049;       /* 收入 / 结余为正（固定绿，不随色板） */
+  --negative:   var(--danger); /* 结余为负 / 超支 */
+  --amount:     #38403C;       /* 明细金额：中性深色，让颜色只用来表达"异常" */
+  --amount-in:  var(--positive);
+
+  /* —— 图表系列色（同样与色板解耦：八个风格下"支出/收入"看起来要一致） —— */
+  --chart-expense: #F0663C;    /* 支出柱 / 折线 */
+  --chart-warn:    #FF9A2E;    /* 图表里的"接近上限"档（热量图） */
+
   --danger:      #FA5151;
   --danger-deep: #E64340;
   --warn-bg:     #FFF6DC;      /* 预算预警：浅黄底 */
@@ -58,7 +71,26 @@
   --over-text:   #E23E2C;      /* 深红字 */
   --over-line:   #FFD2D2;
 
-  --amount: #FF6B3B;           /* 流水金额：橙红 */
+  /* —— 数字排版阶梯（金额与统计数字专用，等宽数字见各组件 tabular-nums） —— */
+  --num-hero-size:   34px;     /* 英雄卡大数字 */
+  --num-hero-weight: 800;
+  --num-hero-track:  -0.02em;  /* 大号数字光学收紧 */
+  --num-lg-size:     20px;     /* 汇总值 */
+  --num-base-size:   16px;     /* 流水金额 */
+  --num-meta-size:   13px;     /* 小计 / 次要数字 */
+
+  /* —— 分类色底：JS 写入 --cat-rgb，此处只控制透明度（深浅模式各自一档） —— */
+  --cat-tint-alpha: 0.12;
+
+  /* —— 线性图标尺寸（配合 .ic 系列类） —— */
+  --icon-size: 22px;
+  --icon-stroke: 1.75;
+
+  /* —— 图表数据浮层（.chart-tip，位置由 charts.js 写入） —— */
+  --tip-bg:   rgba(30, 37, 33, 0.94);
+  --tip-text: #FFFFFF;
+  --tip-sub:  rgba(255, 255, 255, 0.72);
+  --tip-line: rgba(255, 255, 255, 0.10);
 
   --radius-card: 16px;
   --shadow-card:  0 2px 14px rgba(var(--primary-rgb), 0.09);   /* 柔和 + 主题色相 */
@@ -120,6 +152,34 @@ input:focus-visible {
 
 /* JS 显隐的唯一开关：增删 .hidden */
 .hidden { display: none !important; }
+
+/* ----------------------------------------------------------------------
+   2.1 线性图标（js/icons.js 的 sprite，统一 24 网格 / 圆头圆角）
+   颜色一律 currentColor：跟随文字色，也就跟随主题色板与明暗模式。
+   ---------------------------------------------------------------------- */
+.ic {
+  width: var(--icon-size);
+  height: var(--icon-size);
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: var(--icon-stroke);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: -0.145em;      /* 行内与文字基线对齐 */
+  display: inline-block;
+  overflow: visible;             /* 24 网格里贴边的笔画不被裁切 */
+}
+.ic-xs { width: 14px; height: 14px; stroke-width: 2; }
+.ic-sm { width: 16px; height: 16px; stroke-width: 1.9; }
+.ic-lg { width: 26px; height: 26px; stroke-width: 1.6; }
+.ic-cat { width: 20px; height: 20px; stroke-width: 1.9; }
+
+/* 分类图标兜底：用户自定义分类仍是 emoji，尺寸与线性图标对齐 */
+.cat-emoji {
+  font-size: 19px;
+  line-height: 1;
+}
 
 /* ----------------------------------------------------------------------
    3. 应用骨架：#app / 顶栏 / 主内容
@@ -257,6 +317,7 @@ input:focus-visible {
   font-size: 15px;
   font-weight: 500;
   line-height: 1.2;
+  white-space: nowrap;               /* 按钮文案永不折行（吸底操作区里空间紧，折行会更难看） */
   transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
 }
 .btn-primary:active,
@@ -375,7 +436,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 
 .hint {
   font-size: 12px;
-  color: #A0A8A2;
+  color: var(--hint-text);
   line-height: 1.7;
   margin-top: 12px;
 }
@@ -384,6 +445,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
    5. 预算提醒横幅（JS 添加 .banner-warn / .banner-over）
    ---------------------------------------------------------------------- */
 .banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   margin: 12px 16px 0;
   padding: 12px 16px;
   border-radius: 14px;
@@ -391,6 +455,13 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   font-size: 14px;
   font-weight: 600;
   line-height: 1.55;
+}
+.banner > span { flex: 1; min-width: 0; }
+.banner-ic {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2;
+  margin-top: 2px;               /* 与首行文字视觉对齐 */
 }
 .banner-warn {
   background: var(--warn-bg);
@@ -540,7 +611,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 17px;
+  color: var(--primary-deep);
   border-radius: 10px;
   background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.12), rgba(var(--primary-rgb), 0.05));
 }
@@ -565,9 +636,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 }
 .row-entry-arrow {
   flex-shrink: 0;
-  font-size: 18px;
-  line-height: 1;
-  color: var(--text-faint);
+  color: var(--text-decor);
   transition: transform 0.22s ease;
 }
 /* 展开购物清单卡时，箭头转向下（:has 与全站深色解析用同一代浏览器能力） */
@@ -597,11 +666,22 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .cat-item:active { transform: scale(0.93); }
 
 .cat-icon {
-  font-size: 20px;
-  line-height: 1.2;
-  padding: 4px 8px;             /* 浅色圆角小底 + 微渐变（随主题色换色） */
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 10px;
-  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.10), rgba(var(--primary-rgb), 0.04));
+  /* 线性图标 + 分类色淡底：色值由 JS 内联写入 --cat-rgb / --cat-color，
+     透明度取变量，深浅模式各一档（深色下需要更浓才看得清） */
+  background: rgba(var(--cat-rgb, var(--primary-rgb)), var(--cat-tint-alpha));
+  color: var(--cat-color, var(--primary));
+  transition: background 0.15s, color 0.15s;
+}
+/* 选中态：图标底加浓，图标本体用主色（选中=当前操作对象，统一走主题色） */
+.cat-item.selected .cat-icon {
+  background: rgba(var(--primary-rgb), 0.16);
+  color: var(--primary-deep);
 }
 
 .cat-name {
@@ -688,8 +768,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
-  background: linear-gradient(180deg, var(--focus-bg), var(--surface-2));   /* 微渐变图标底 */
+  /* 分类色淡底 + 分类色线性图标（色值由 JS 内联写入，见 7. 分类九宫格同款变量） */
+  background: rgba(var(--cat-rgb, var(--primary-rgb)), var(--cat-tint-alpha));
+  color: var(--cat-color, var(--primary));
   border-radius: 12px;
 }
 
@@ -717,10 +798,10 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   white-space: nowrap;
 }
 
-/* 金额：橙红系、右对齐、等宽数字 */
+/* 金额：中性深色、右对齐、等宽数字（颜色只用来表达"异常"，见 31.7） */
 .record-amount {
   flex-shrink: 0;
-  font-size: 16px;
+  font-size: var(--num-base-size);
   font-weight: 600;
   color: var(--amount);
   font-variant-numeric: tabular-nums;
@@ -730,9 +811,11 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
    9. 统计页：汇总三栏 + 图表
    ---------------------------------------------------------------------- */
 #stat-summary {
-  display: flex;
-  align-items: stretch;
-  padding: 16px 4px;
+  /* 2×2 数据面板：金额带千分位后 4 列一行放不下（数字不换行会互相压字） */
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 12px;
+  padding: 16px 14px;
 }
 
 /* ---- 9.1 智能洞察卡（统计页顶部）：横向滑动的洞察轮播 ---- */
@@ -818,25 +901,21 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 }
 
 .summary-item {
-  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 2px 4px;
+  align-items: flex-start;      /* 2×2 数据面板：左对齐，与英雄卡同一套读法 */
+  gap: 3px;
 }
-.summary-item + .summary-item { border-left: 1px solid var(--line); }
-
 .summary-label {
   font-size: 12px;
   color: var(--text-grey);
 }
 .summary-value {
-  font-size: 20px;              /* 汇总值加大加粗 */
+  font-size: var(--num-lg-size);
   font-weight: 700;
   color: var(--text-main);
+  letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
 }
 
@@ -925,9 +1004,10 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .bcat-icon {
   width: 26px;
   flex-shrink: 0;
-  font-size: 18px;
-  text-align: center;
-  line-height: 1.2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cat-color, var(--text-sub));   /* 分类色线性图标（变量由 JS 内联写入） */
 }
 .bcat-name {
   flex: 0 0 58px;
@@ -986,8 +1066,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
-  background: linear-gradient(180deg, var(--focus-bg), var(--surface-2));
+  /* 与分类九宫格同一套：分类色淡底 + 分类色线性图标 */
+  background: rgba(var(--cat-rgb, var(--primary-rgb)), var(--cat-tint-alpha));
+  color: var(--cat-color, var(--primary));
   border-radius: 11px;
 }
 
@@ -1057,8 +1138,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
-  background: linear-gradient(180deg, var(--focus-bg), var(--surface-2));   /* 微渐变图标底 */
+  /* 与分类九宫格同一套：分类色淡底 + 分类色线性图标（变量由 JS 内联写入） */
+  background: rgba(var(--cat-rgb, var(--primary-rgb)), var(--cat-tint-alpha));
+  color: var(--cat-color, var(--primary));
   border-radius: 10px;
 }
 .mcat-name {
@@ -1141,11 +1223,11 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 }
 
 .tab-icon {
-  font-size: 22px;
-  line-height: 1;
-  filter: grayscale(1);          /* 未选中：emoji 置灰 */
-  opacity: 0.5;
-  transition: filter 0.2s, opacity 0.2s, transform 0.2s;
+  width: 23px;
+  height: 23px;
+  stroke-width: 1.8;
+  opacity: 0.55;                 /* 未选中：整体压暗（线性图标靠透明度，不再靠 grayscale） */
+  transition: opacity 0.2s, transform 0.2s;
 }
 
 .tab-label {
@@ -1161,7 +1243,6 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 /* 激活态：主色高亮 + 图标弹性放大（tabPop 见第 15 节） */
 .tab.active { color: var(--primary-deep); }
 .tab.active .tab-icon {
-  filter: none;
   opacity: 1;
   animation: tabPop 0.32s ease;
 }
@@ -1205,7 +1286,10 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   border-radius: 20px 20px 0 0;
   padding: 22px 20px calc(24px + env(safe-area-inset-bottom, 0px));
   box-shadow: var(--shadow-modal);
-  animation: slideUp 0.3s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  /* backwards：动画开始前先占住起始关键帧（不闪），结束后交还元素自身样式——
+     下拉手势写入的 inline transform 才生效（fill-mode: both 会一直压住它）。 */
+  animation: slideUp 0.3s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+  transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .modal-title {
@@ -1336,7 +1420,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   .cat-item:hover:not(.selected) { border-color: var(--primary-border); }
 
   .tab:hover { color: var(--primary-deep); }
-  .tab:hover .tab-icon { filter: none; opacity: 0.9; transform: translateY(-2px); }  /* 图标微弹 */
+  .tab:hover .tab-icon { opacity: 0.9; transform: translateY(-2px); }  /* 图标微弹 */
 }
 
 /* ----------------------------------------------------------------------
@@ -1382,17 +1466,25 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* 品牌标记：与应用图标同一套视觉（圆角方块 + 主题渐变 + 白色「记」） */
 .auth-logo {
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 10px;
-  border-radius: 20px;
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-bright) 100%);
-  box-shadow: 0 6px 18px rgba(var(--primary-rgb), 0.35);
+  width: 68px;
+  height: 68px;
+  margin: 0 auto 12px;
+  border-radius: 21px;
+  background: linear-gradient(150deg, var(--primary-bright) 0%, var(--primary-dark) 100%);
+  box-shadow: 0 10px 24px rgba(var(--primary-rgb), 0.32),
+              inset 0 1px 0 rgba(255, 255, 255, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 32px;
+  color: var(--on-primary);
+  font-size: 36px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -1px;
+  text-indent: -1px;             /* 单字光学居中：抵消字面右侧留白 */
+  user-select: none;
 }
 
 .auth-title {
@@ -1548,8 +1640,10 @@ body[data-mode="dark"] {
 
   --text-main:  #E8ECEA;                   /* 主文字 */
   --text-sub:   #9DB0A7;                   /* 次文字 */
-  --text-grey:  #8A9C93;
-  --text-faint: #6E7F77;                   /* 更弱 */
+  --text-grey:  #8A9C93;                   /* 弱化文字（深色下 5.4:1） */
+  --text-faint: #7E8F87;                   /* 更弱文字（深色下 4.6:1） */
+  --text-decor: #5A6A62;                   /* 纯装饰箭头 / 点缀 */
+  --hint-text:  #8A9C93;                   /* 说明文字 */
   --title-color: #D8E8DF;
 
   --line:     #2A352F;                     /* 分割线 */
@@ -1558,6 +1652,19 @@ body[data-mode="dark"] {
   --placeholder: #64756D;
   --empty-text: #8FA096;
   --divider-soft: #2C3833;
+
+  /* 语义色：深色下提亮，语义与浅色一致 */
+  --positive: #3FC98C;
+  --amount:   #E8ECEA;
+  --cat-tint-alpha: 0.22;                  /* 深底上分类色需要更浓才看得清 */
+  --chart-expense:  #FF8A5C;               /* 深底上提亮一档 */
+  --chart-warn:     #FFB020;
+
+  /* 深色下的数据浮层：改浅底深字，否则和深背景糊在一起 */
+  --tip-bg:   rgba(238, 245, 242, 0.97);
+  --tip-text: #16211C;
+  --tip-sub:  rgba(22, 33, 28, 0.62);
+  --tip-line: rgba(0, 0, 0, 0.06);
 
   /* 表面 / 轨道 */
   --surface:      #1C2622;                 /* 卡片表面 */
@@ -1598,6 +1705,14 @@ body[data-mode="dark"] {
 
 /* 根元素 color-scheme：视口滚动条等跟随深色 */
 html:has(body[data-mode="dark"]) { color-scheme: dark; }
+
+/* 深色下的 App 壳外氛围底：与 --bg-page 同色系（登录页背景、桌面端留白都靠它） */
+body[data-mode="dark"] {
+  background:
+    radial-gradient(900px 620px at 12% -8%, rgba(var(--primary-rgb), 0.13), transparent 62%),
+    radial-gradient(820px 620px at 92% 108%, rgba(var(--primary-rgb), 0.09), transparent 60%),
+    #0C120F;
+}
 
 /* 深色下的少数组件微调（其余全部由上面的变量接管） */
 body[data-mode="dark"] .auth-tab.active { box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35); }
@@ -1712,9 +1827,10 @@ body[data-mode="dark"] #quick-amount::placeholder { color: #5C6E66; }
 .cmp-icon {
   width: 22px;
   flex-shrink: 0;
-  text-align: center;
-  font-size: 16px;
-  line-height: 1.2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cat-color, var(--text-sub));   /* 分类色线性图标（变量由 JS 内联写入） */
 }
 .cmp-name {
   flex: 0 0 56px;
@@ -1752,10 +1868,13 @@ body[data-mode="dark"] #quick-amount::placeholder { color: #5C6E66; }
   font-variant-numeric: tabular-nums;
 }
 .cmp-pct.up   { color: var(--danger); }         /* 涨：支出变多，警示红 */
-.cmp-pct.down { color: var(--primary-deep); }   /* 降：支出变少，主题绿 */
+.cmp-pct.down { color: var(--positive); }       /* 降：支出变少，固定绿 */
 
 /* ---- 31.6 数据备份提醒（#backup-hint，默认 .hidden） ---- */
 .backup-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
   background: var(--warn-bg);
   border: 1px solid var(--warn-line);
   color: var(--warn-text);
@@ -1765,10 +1884,12 @@ body[data-mode="dark"] #quick-amount::placeholder { color: #5C6E66; }
   line-height: 1.6;
   margin-bottom: 10px;
 }
+.backup-hint > span { flex: 1; min-width: 0; }
+.backup-hint .banner-ic { width: 15px; height: 15px; margin-top: 2px; }
 
-/* ---- 31.7 流水金额：收入为绿色（文本由 JS 生成，样式只管颜色） ---- */
-.record-amount.income { color: var(--primary-deep); }
-.day-total.positive   { color: var(--primary-deep); }   /* 日小计为净收入 */
+/* ---- 31.7 流水金额：收入为固定绿（与品牌色解耦，换色板语义不漂移） ---- */
+.record-amount.income { color: var(--amount-in); }
+.day-total.positive   { color: var(--positive); }   /* 日小计为净收入 */
 
 /* ---- 31.8 信息横幅（智能提醒）：浅蓝（圆角/内边距沿用第 5 节 .banner） ---- */
 .banner-info {
@@ -1825,15 +1946,9 @@ body[data-mode="dark"] .banner-info {
 #quick-amount,
 #budget-input { font-variant-numeric: tabular-nums; }
 
-/* ---- 34.2 卡片入场微动画（0.25s fade + up） ----
-   fill-mode 用 backwards：动画结束后不锁定 transform，
-   桌面端 hover 上浮（第 16 节 .card:hover）不受影响；
-   prefers-reduced-motion 由第 17 节全局降级为瞬时 */
-@keyframes cardIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.card { animation: cardIn 0.25s ease backwards; }
+/* ---- 34.2 卡片不再逐个入场 ----
+   全站动效预算集中在三处：页面切换（.view）、底栏玻璃拖动、保存成功反馈。
+   卡片各自 fade+up 会与 .view 的入场叠加，造成"满屏都在动"，故移除。 */
 
 /* ---- 34.3 统计卡标题：左侧 4px 主题色竖条 ---- */
 .card-title {
@@ -1843,14 +1958,9 @@ body[data-mode="dark"] .banner-info {
   line-height: 1.3;
 }
 
-/* ---- 34.4 分类选中态：描边 glow + 呼吸感（reduced-motion 时自动停止） ---- */
-@keyframes catBreath {
-  0%, 100% { box-shadow: 0 0 0 2px var(--primary-glow); }
-  50%      { box-shadow: 0 0 0 5px var(--primary-glow); }
-}
+/* ---- 34.4 分类选中态：描边 glow（去掉了原来的持续呼吸动画，选中反馈改为瞬时可见） ---- */
 .cat-item.selected {
   box-shadow: 0 0 0 2px var(--primary-glow);
-  animation: catBreath 2.4s ease-in-out infinite;
 }
 
 /* ---- 34.5 底部导航：液态透镜指示器（DOM 里的 .tab-indicator，JS 写入 --tab-index） ---- */
@@ -3046,3 +3156,490 @@ body[data-mode="dark"] .accent-card[data-accent="sakura"] .accent-preview {
   --pv-bg: linear-gradient(180deg, #1D141A 0%, #120C10 100%);
   --pv-card: #211820; --pv-accent: #E77CA6;
 }
+
+/* ======================================================================
+   39. 记账页英雄卡（#hero-card，JS 渲染：#hero-*）
+   —— 本页唯一的主角：本月支出大数字 + 环比 + 收入结余 + 近 7 天迷你柱 + 预算进度
+   所有颜色走 token，深浅模式与八套色板自动适配。
+   ====================================================================== */
+.hero-card {
+  /* 右上角一层主题色柔光：让英雄卡与普通卡片拉开层次 */
+  background:
+    radial-gradient(130% 105% at 100% 0%, rgba(var(--primary-rgb), 0.13) 0%, rgba(var(--primary-rgb), 0) 58%),
+    var(--surface);
+  padding: 17px 16px 15px;
+}
+
+.hero-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hero-main { min-width: 0; }
+
+.hero-label {
+  font-size: 12px;
+  color: var(--hint-text);
+  letter-spacing: 0.3px;
+}
+
+.hero-amount {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  margin-top: 3px;
+  font-size: var(--num-hero-size);
+  font-weight: var(--num-hero-weight);
+  letter-spacing: var(--num-hero-track);
+  line-height: 1.12;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+}
+.hero-cur {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-sub);
+  line-height: 1;
+}
+
+/* 环比上月：涨（花得更多）用警示红，降用固定绿（与品牌色解耦） */
+.hero-delta {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--hint-text);
+  font-variant-numeric: tabular-nums;
+}
+.hero-delta.up   { color: var(--danger); }
+.hero-delta.down { color: var(--positive); }
+.hero-delta .ic  { width: 13px; height: 13px; stroke-width: 2.1; }
+
+/* 右侧：收入 / 结余 / 笔数 三行小字（右对齐，避免与大数字抢注意力） */
+.hero-side {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-top: 2px;
+  text-align: right;
+}
+.hero-side-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.hero-side-label {
+  font-size: 11px;
+  color: var(--hint-text);
+}
+.hero-side-value {
+  font-size: var(--num-meta-size);
+  font-weight: 600;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+}
+.hero-side-value.positive { color: var(--positive); }
+.hero-side-value.negative { color: var(--negative); }
+
+/* ---- 近 7 天迷你柱（纯 CSS 柱，无 canvas，高度由 JS 写内联 %） ---- */
+.hero-spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  margin-top: 15px;
+}
+.spark-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.spark-bar-wrap {
+  width: 100%;
+  height: 36px;
+  display: flex;
+  align-items: flex-end;
+}
+.spark-bar {
+  width: 100%;
+  max-width: 20px;              /* 柱体收窄，避免零值日连成一条横线 */
+  margin: 0 auto;
+  min-height: 3px;              /* 零值也留一个底点，7 天骨架始终完整 */
+  border-radius: 4px;
+  background: rgba(var(--primary-rgb), 0.26);
+  transition: height 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.spark-col.today .spark-bar {
+  background: linear-gradient(180deg, var(--primary-bright), var(--primary));
+}
+.spark-day {
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-decor);
+}
+.spark-col.today .spark-day {
+  color: var(--primary-deep);
+  font-weight: 700;
+}
+
+/* ---- 预算进度（未设预算时整块 .hidden） ---- */
+.hero-budget {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.hero-budget-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+  font-size: 12px;
+  color: var(--hint-text);
+  font-variant-numeric: tabular-nums;
+}
+.hero-budget-head b {
+  color: var(--text-main);
+  font-weight: 600;
+}
+.hero-budget .progress-track { height: 6px; }
+.hero-fill {
+  height: 100%;
+  width: 0;                                  /* 宽度由 JS 内联写入 */
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--primary-bright), var(--primary));
+  transition: width 0.42s cubic-bezier(0.22, 1, 0.36, 1), background 0.2s;
+}
+.hero-fill.progress-warn { background: linear-gradient(90deg, #FFC53D, var(--warn-text)); }
+.hero-fill.progress-over { background: linear-gradient(90deg, #FF7A6B, var(--danger)); }
+
+/* ======================================================================
+   39.2 线性图标细节（与既有组件对齐）
+   ====================================================================== */
+
+/* 实心图标（已收藏的星等）：填充跟随文字色，笔画略收细避免显胖 */
+.ic-fill {
+  fill: currentColor;
+  stroke-width: 1.2;
+}
+
+/* 图标 + 文字的小按钮：统一基线间距（原先是 "emoji + 空格 + 文字"） */
+.food-chip,
+.pick-fav,
+.nlp-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* 洞察卡的图标颜色跟随 tone（图标本身是分类的，颜色表达"好坏"） */
+.insight-icon { color: var(--primary-deep); }
+.insight-slide.tone-warn .insight-icon { color: var(--danger); }
+.insight-slide.tone-good .insight-icon { color: var(--positive); }
+
+/* ======================================================================
+   40. 图表（B 批）：HTML 数据浮层 + 分类占比图例
+   —— 图表本体仍由 Chart.js 画在 canvas 上，这两块是与它配套的 DOM 部分，
+      颜色一律读 token，深浅模式与八套色板自动适配。
+   ====================================================================== */
+
+/* ---- 40.1 跟随手指的数据浮层（Chart.js external tooltip 的容器，见 charts.js） ---- */
+.chart-tip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 300;
+  pointer-events: none;
+  min-width: 92px;
+  max-width: 68vw;
+  padding: 9px 11px;
+  border-radius: 12px;
+  background: var(--tip-bg);
+  border: 1px solid var(--tip-line);
+  color: var(--tip-text);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.22);
+  font-size: 12px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  transform: translate(-50%, -100%);   /* 以「手指位置」为底部中点 */
+  transition: opacity 0.12s ease;
+}
+.chart-tip.hidden { display: none !important; }
+
+.chart-tip-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--tip-text);
+}
+.chart-tip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.chart-tip-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+.chart-tip-label { color: var(--tip-sub); }
+.chart-tip-value {
+  margin-left: auto;
+  padding-left: 10px;
+  font-weight: 600;
+}
+
+/* ---- 40.2 分类占比图例：图标 + 金额 + 占比条（替代 Chart.js 内置图例） ---- */
+.pie-legend { margin-top: 14px; }
+.pl-row { padding: 7px 0; }
+.pl-row + .pl-row { border-top: 1px solid var(--line); }
+
+.pl-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.pl-icon {
+  width: 20px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cat-color, var(--text-sub));   /* 分类色线性图标 */
+}
+.pl-name {
+  flex: 0 1 auto;
+  font-size: 13px;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pl-pct {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-grey);
+  font-variant-numeric: tabular-nums;
+}
+.pl-amount {
+  min-width: 70px;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+}
+.pl-track {
+  display: block;
+  height: 4px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: var(--track);
+  overflow: hidden;
+}
+.pl-bar {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ======================================================================
+   41. 细节与反馈（C 批）
+   41.1 空状态插画  41.2 操作成功反馈  41.3 底部抽屉（把手/吸顶/吸底/折叠）
+   41.4 数值过渡  41.5 滚动条
+   ====================================================================== */
+
+/* ---- 41.1 空状态：柔色图标底 + 文案 +（大号）行动按钮 ---- */
+.empty-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 10px;
+  border-radius: 14px;
+  background: rgba(var(--primary-rgb), 0.10);
+  color: var(--primary-deep);
+}
+
+.empty-lg { padding: 36px 22px 30px; }
+.empty-lg .empty-art {
+  width: 62px;
+  height: 62px;
+  margin-bottom: 15px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.14), rgba(var(--primary-rgb), 0.06));
+}
+.empty-lg .empty-art .ic { width: 29px; height: 29px; stroke-width: 1.6; }
+
+.empty-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 5px;
+}
+.empty-sub {
+  font-size: 13px;
+  color: var(--hint-text);
+  line-height: 1.6;
+}
+.empty-lg button { margin-top: 16px; }
+
+/* ---- 41.2 操作成功反馈：打勾描线 + 文案（#success-flash，JS 控制显隐） ---- */
+#success-flash {
+  position: fixed;
+  /* 居中方式与 toast 一致：left/right:0 + margin auto + width:max-content。
+     用 left:50% + translateX(-50%) 会让"可用宽度"只剩半个屏幕，文案被迫折行。 */
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: max-content;
+  bottom: calc(var(--tabbar-h) + 30px + env(safe-area-inset-bottom, 0px));
+  z-index: 260;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: 86vw;
+  padding: 10px 16px 10px 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  color: var(--text-main);
+  box-shadow: 0 12px 30px rgba(var(--primary-rgb), 0.20), 0 2px 8px rgba(0, 0, 0, 0.08);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: sfIn 0.34s cubic-bezier(0.22, 1.2, 0.36, 1) both;
+}
+#success-flash.out { animation: sfOut 0.26s ease both; }
+
+.sf-svg {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--positive);
+}
+.sf-ring { opacity: 0.3; stroke-dasharray: 63; stroke-dashoffset: 63; animation: sfDraw 0.46s ease forwards; }
+.sf-tick { stroke-dasharray: 20; stroke-dashoffset: 20; animation: sfDraw 0.3s ease 0.16s forwards; }
+
+@keyframes sfDraw { to { stroke-dashoffset: 0; } }
+@keyframes sfIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.94); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes sfOut {
+  to { opacity: 0; transform: translateY(6px) scale(0.97); }
+}
+
+/* ---- 41.3 底部抽屉：把手 / 标题吸顶 / 按钮吸底 ---- */
+.modal-body {
+  padding: 0 20px;                 /* 上留白交给把手，下留白交给吸底操作区 */
+  overscroll-behavior: contain;
+}
+
+.modal-handle {
+  display: block;
+  width: 38px;
+  height: 4px;
+  margin: 10px auto 6px;
+  border-radius: 999px;
+  background: var(--divider-soft);
+  cursor: grab;
+  touch-action: none;              /* 下拉手势由 JS 处理（见 bindModalDrag） */
+}
+.modal-handle:active { background: var(--text-decor); }
+
+/* 长弹窗滚动时标题吸顶，始终知道自己在编辑什么 */
+.modal-title {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: 0 -20px 18px;
+  padding: 6px 20px 12px;
+  background: var(--surface);
+}
+
+/* 操作按钮吸底：内容再长也不用滚到底才能保存 */
+.modal-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin: 20px -20px 0;
+  padding: 12px 20px calc(14px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+/* 商品明细：默认折叠成一行摘要，点开才铺开编辑 */
+.items-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--bg-input);
+  font-size: 13px;
+  color: var(--text-sub);
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.items-toggle:active { background: var(--surface-soft); }
+.items-toggle-icon { display: flex; color: var(--text-grey); }
+.items-toggle-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.items-toggle-arrow {
+  color: var(--text-decor);
+  transition: transform 0.22s ease;
+}
+.items-editor:not(.collapsed) .items-toggle-arrow { transform: rotate(90deg); }
+.items-editor:not(.collapsed) .items-toggle {
+  border-color: var(--primary-border);
+  color: var(--text-main);
+}
+.items-editor.collapsed .items-body { display: none; }
+.items-body { margin-top: 10px; }
+
+/* ---- 41.4 数值过渡：切换月份时让数字"换了一口气" ---- */
+@keyframes numIn {
+  from { opacity: 0.3; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+.num-in { animation: numIn 0.32s ease both; }
+
+/* ---- 41.5 主滚动区滚动条（桌面端可见，移动端本来就不显示） ---- */
+#app-main {
+  scrollbar-width: thin;
+  scrollbar-color: var(--divider-soft) transparent;
+}
+#app-main::-webkit-scrollbar { width: 10px; }
+#app-main::-webkit-scrollbar-track { background: transparent; }
+#app-main::-webkit-scrollbar-thumb {
+  background: var(--divider-soft);
+  background-clip: content-box;
+  border: 3px solid transparent;   /* 透明边框把滑块做细 */
+  border-radius: 999px;
+}
+#app-main::-webkit-scrollbar-thumb:hover { background: var(--text-decor); background-clip: content-box; }

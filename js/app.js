@@ -25,12 +25,35 @@ var pieKind = 'expense';      // 统计页饼图类型
 var searchTimer = null;       // 搜索防抖
 var toastTimer = null;
 
-function f(n) { return Store.formatAmount(n); }
+/** 展示用金额：两位小数 + 千分位（写入输入框请改用 Store.formatAmount） */
+function f(n) { return Store.formatMoney(n); }
 
 function esc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/**
+ * 分类图标标签：内置分类用线性图标（icons.js），用户自建/改过图标的分类继续用 emoji。
+ * 图标的颜色与淡底取分类自己的 color，做成内联变量供 CSS 读取。
+ */
+function catIconHTML(cat, cls, size) {
+  var style = '';
+  var name = cat && cat.color ? String(cat.color) : '';
+  var m = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(name);
+  if (m) {
+    var h = m[1];
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    var rgb = parseInt(h.slice(0, 2), 16) + ',' + parseInt(h.slice(2, 4), 16) + ',' + parseInt(h.slice(4, 6), 16);
+    style = ' style="--cat-rgb:' + rgb + ';--cat-color:#' + h + '"';
+  }
+  var iconName = Store.categoryIconName(cat);
+  if (iconName && window.Icons && Icons.has(iconName)) {
+    return '<span class="' + cls + '"' + style + '>' + Icons.svg(iconName, size || 'ic-cat') + '</span>';
+  }
+  return '<span class="' + cls + '"' + style + '><span class="cat-emoji">' +
+    esc(cat && cat.icon ? cat.icon : '🏷️') + '</span></span>';
 }
 
 function toast(msg) {
@@ -40,6 +63,31 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(function () { t.classList.add('hidden'); }, 1800);
 }
+
+/**
+ * 保存成功反馈：打勾描线 + 一句结果 +（支持时）一次轻微振动。
+ * 记账 / 记餐 / 导入这类"东西已经存下来了"的动作走这里，比一行 toast 更有落点。
+ */
+var successTimer = null;
+function successFlash(msg) {
+  var el = $('success-flash');
+  if (!el) return;
+  $('success-text').textContent = msg || '已保存';
+  el.classList.remove('hidden', 'out');
+  void el.offsetWidth;                       // 强制重排，让入场动画重新播放
+  if (navigator.vibrate) {
+    try { navigator.vibrate(12); } catch (e) { /* 部分浏览器需用户手势，失败忽略 */ }
+  }
+  clearTimeout(successTimer);
+  successTimer = setTimeout(function () {
+    el.classList.add('out');
+    setTimeout(function () {
+      el.classList.add('hidden');
+      el.classList.remove('out');
+    }, 260);
+  }, 1150);
+}
+window.successFlash = successFlash;          // diet-ui.js 也要用
 
 function downloadFile(filename, content, mime) {
   var blob = new Blob([content], { type: mime });
@@ -113,6 +161,7 @@ function shiftMonth(delta) {
   if (ym > Store.currentYm()) return; // 不允许翻到未来
   currentYm = ym;
   updateMonthLabel();
+  flashNumbers();
   if (currentView === 'record') renderRecordList();
   else if (currentView === 'stats') renderStats();
   else if (currentView === 'budget') renderBudget();
@@ -121,6 +170,18 @@ function shiftMonth(delta) {
 function updateMonthLabel() {
   var parts = currentYm.split('-');
   $('month-label').textContent = parseInt(parts[0], 10) + '年' + parseInt(parts[1], 10) + '月';
+}
+
+/** 月份切换时让数字"换一口气"：轻淡入一次，比整页重绘更有连续性 */
+function flashNumbers() {
+  var ids = ['hero-card', 'stat-summary', 'record-sum'];
+  for (var i = 0; i < ids.length; i++) {
+    var el = $(ids[i]);
+    if (!el) continue;
+    el.classList.remove('num-in');
+    void el.offsetWidth;                     // 重排以重启动画
+    el.classList.add('num-in');
+  }
 }
 
 /* ================= 主题（明暗 data-mode × 风格 data-accent 双维度） ================= */
@@ -257,7 +318,7 @@ function openEncModal() {
   $('enc-modal-desc').textContent = on
     ? '关闭后数据恢复为本机明文存储，打开应用不再需要解锁。请输入当前密码确认。'
     : '开启后每次打开小账本都需输入密码解锁；忘记密码将无法恢复数据，建议先在管理页导出备份。';
-  $('enc-modal-warn').textContent = on ? '' : '⚠️ 请确认你已记住当前密码，并已做好备份。';
+  $('enc-modal-warn').textContent = on ? '' : '请确认你已记住当前密码，并已做好备份。';
   $('enc-confirm-btn').textContent = on ? '关闭加密' : '开启加密';
   $('enc-pw-input').value = '';
   $('modal-enc').classList.remove('hidden');
@@ -324,8 +385,8 @@ function renderCategoryGrid(container, kind, selectedId) {
   for (var i = 0; i < cats.length; i++) {
     var c = cats[i];
     html += '<button type="button" class="cat-item' + (c.id === selectedId ? ' selected' : '') +
-      '" data-id="' + esc(c.id) + '"><span class="cat-icon">' + esc(c.icon) +
-      '</span><span class="cat-name">' + esc(c.name) + '</span></button>';
+      '" data-id="' + esc(c.id) + '">' + catIconHTML(c, 'cat-icon') +
+      '<span class="cat-name">' + esc(c.name) + '</span></button>';
   }
   container.innerHTML = html;
 }
@@ -346,7 +407,7 @@ function quickSave() {
   } catch (e) { toast(e.message); return; }
   $('quick-amount').value = '';
   $('quick-note').value = '';
-  toast(quickType === 'income' ? '收入已记 ✓' : '已记账 ✓');
+  successFlash(quickType === 'income' ? '收入已记录' : '已记一笔');
   renderRecordList();
   refreshBanner();
   checkReminders();
@@ -377,9 +438,133 @@ function smartParse() {
   toast('已识别 ¥' + f(res.amount) + '，确认后点「记一笔」');
 }
 
+/* ---------- 英雄卡：本月支出一眼可见 ---------- *//* 结构：大数字（含环比）+ 收入/结余/笔数 + 近 7 天迷你柱 + 预算进度
+   数据全部来自 Store，不缓存；内容没变时跳过重绘，避免搜索输入时数字反复滚动 */
+
+var heroKey = '';      // 上次渲染的数据指纹
+var heroShown = null;  // 上次显示的大数字（用于滚动动画的起点）
+
+/** 本地日期 → 'YYYY-MM-DD' */
+function dayStr(d) {
+  return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+}
+
+/** 金额滚动：from → to（减弱动态效果时直接落定） */
+function tweenMoney(el, from, to) {
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    el.textContent = f(to);
+    return;
+  }
+  var t0 = null;
+  var DUR = 460;
+  function frame(ts) {
+    if (t0 === null) t0 = ts;
+    var p = Math.min((ts - t0) / DUR, 1);
+    var eased = 1 - Math.pow(1 - p, 3);            // easeOutCubic
+    el.textContent = f(from + (to - from) * eased);
+    if (p < 1) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+function renderHero() {
+  var card = $('hero-card');
+  if (!card) return;
+
+  var s = Store.getMonthSummary(currentYm);
+  var y = parseInt(currentYm.slice(0, 4), 10);
+  var m = parseInt(currentYm.slice(5, 7), 10);
+
+  // 近 7 天窗口：看当月 = 今天往前 7 天；看往月 = 该月月末往前 7 天
+  var end = currentYm === Store.currentYm()
+    ? new Date()
+    : new Date(y, m, 0);                            // new Date(y, m, 0) = 该月最后一天
+  var todayStr = Store.todayStr();
+  var days = [];
+  for (var i = 6; i >= 0; i--) {
+    days.push(dayStr(new Date(end.getFullYear(), end.getMonth(), end.getDate() - i)));
+  }
+
+  // 这 7 天各自的支出（窗口可能跨月，所以从全量记录里筛，而不是只取当月）
+  var daily = {};
+  for (var k = 0; k < days.length; k++) daily[days[k]] = 0;
+  var all = Store.getRecords();
+  for (var j = 0; j < all.length; j++) {
+    var rec = all[j];
+    if (rec.type === 'expense' && daily[rec.date] !== undefined) daily[rec.date] += rec.amount;
+  }
+
+  var budget = Store.getBudget();
+  var key = [currentYm, s.expense, s.income, s.balance, s.count, budget,
+    days.map(function (d) { return daily[d]; }).join('/')].join('|');
+  if (key === heroKey) return;                      // 内容没变，不重绘
+  heroKey = key;
+
+  $('hero-label').textContent = m + '月支出';
+
+  // 大数字：首次直接显示，之后的变化滚动过去（数字"长上去"的反馈）
+  var expEl = $('hero-expense');
+  if (heroShown !== null && heroShown !== s.expense) tweenMoney(expEl, heroShown, s.expense);
+  else expEl.textContent = f(s.expense);
+  heroShown = s.expense;
+
+  // 环比上月：花得更多用警示红、更少用固定绿（与品牌色解耦）
+  var prev = Store.getMonthSummary(shiftYm(currentYm, -1));
+  var deltaEl = $('hero-delta');
+  if (prev.expense > 0 && s.expense > 0) {
+    var diff = s.expense - prev.expense;
+    var pct = Math.round(Math.abs(diff) / prev.expense * 100);
+    deltaEl.className = 'hero-delta' + (diff > 0 ? ' up' : (diff < 0 ? ' down' : ''));
+    deltaEl.innerHTML = (diff === 0 ? '' : Icons.svg(diff > 0 ? 'up-right' : 'down-right', 'ic-xs')) +
+      '<span>' + (diff === 0 ? '与上月持平' : '比上月' + (diff > 0 ? '多花 ' : '少花 ') + pct + '%') + '</span>';
+  } else {
+    deltaEl.className = 'hero-delta hidden';
+  }
+
+  // 右侧三行：收入 / 结余 / 笔数
+  $('hero-income').textContent = '¥' + f(s.income);
+  var balEl = $('hero-balance');
+  balEl.textContent = (s.balance < 0 ? '-' : '') + '¥' + f(Math.abs(s.balance));
+  balEl.className = 'hero-side-value' + (s.balance < 0 ? ' negative' : (s.balance > 0 ? ' positive' : ''));
+  $('hero-count').textContent = String(s.count);
+
+  // 近 7 天迷你柱：最高的一天撑满，零值留一个底点
+  var max = 0;
+  for (k = 0; k < days.length; k++) max = Math.max(max, daily[days[k]]);
+  var spark = '';
+  for (k = 0; k < days.length; k++) {
+    var v = daily[days[k]];
+    var h = max > 0 ? Math.max(Math.round(v / max * 100), 6) : 6;
+    var wd = WEEKS[new Date(days[k].slice(0, 4), days[k].slice(5, 7) - 1, days[k].slice(8, 10)).getDay()].slice(1);
+    spark += '<div class="spark-col' + (days[k] === todayStr ? ' today' : '') + '" title="' +
+      days[k] + ' ¥' + f(v) + '">' +
+      '<div class="spark-bar-wrap"><div class="spark-bar" style="height:' + h + '%"></div></div>' +
+      '<span class="spark-day">' + wd + '</span></div>';
+  }
+  $('hero-spark').innerHTML = spark;
+
+  // 预算进度：没设预算时整块隐藏
+  var bEl = $('hero-budget');
+  if (budget == null) {
+    bEl.className = 'hero-budget hidden';
+  } else {
+    var st = Store.getBudgetStatus(currentYm);
+    bEl.className = 'hero-budget';
+    bEl.innerHTML = '<div class="hero-budget-head">' +
+      '<span>预算 ¥' + f(st.budget) + ' · 已用 ' + st.usedPct + '%</span>' +
+      '<span>' + (st.level === 'over'
+        ? '<span class="over-text">已超支 ¥' + f(Math.abs(st.remaining)) + '</span>'
+        : '剩余 <b>¥' + f(st.remaining) + '</b>') + '</span></div>' +
+      '<div class="progress-track"><div class="hero-fill' +
+      (st.level === 'warn' ? ' progress-warn' : (st.level === 'over' ? ' progress-over' : '')) +
+      '" style="width:' + Math.min(st.usedPct, 100) + '%"></div></div>';
+  }
+}
+
 /* ---------- 流水列表（含搜索） ---------- */
 
 function renderRecordList() {
+  renderHero();                                   // 英雄卡与明细同源，一起刷新
   var list = $('record-list');
   var q = $('search-input').value.trim();
   var scope = $('search-scope').value;
@@ -422,7 +607,11 @@ function renderRecordList() {
   var dayKey = '';
   for (var i = 0; i < records.length; i++) {
     var r = records[i];
-    var cat = cats[r.categoryId] || { name: '未知分类', icon: '🏷️' };
+    var cat = cats[r.categoryId] || null;
+    // 分类被删掉时（导入数据可能指向不存在的分类）用兜底图标，不显示破图
+    var iconHTML = cat ? catIconHTML(cat, 'record-icon')
+      : '<span class="record-icon" style="--cat-rgb:144,164,174;--cat-color:#90A4AE">' +
+        Icons.svg('fallback', 'ic-cat') + '</span>';
     if (r.date !== dayKey) {
       if (dayKey) html += '</div></div>';
       dayKey = r.date;
@@ -436,9 +625,10 @@ function renderRecordList() {
     }
     var isIncome = r.type === 'income';
     html += '<div class="record-item" data-id="' + esc(r.id) + '">' +
-      '<span class="record-icon">' + esc(cat.icon) + '</span>' +
-      '<div class="record-info"><span class="record-cat">' + esc(cat.name) +
-      (r.items && r.items.length ? '<span class="items-badge">🧾 ' + r.items.length + '件</span>' : '') +
+      iconHTML +
+      '<div class="record-info"><span class="record-cat">' + esc(cat ? cat.name : '未知分类') +
+      (r.items && r.items.length ? '<span class="items-badge">' + Icons.svg('receipt', 'ic-xs') +
+        r.items.length + '件</span>' : '') +
       '</span>' +
       (r.note ? '<span class="record-note">' + esc(r.note) + '</span>' : '') +
       '</div><span class="' + (isIncome ? 'record-amount income' : 'record-amount') + '">' +
@@ -493,6 +683,35 @@ function animateCountUps(container) {
   }
 }
 
+/**
+ * 分类占比图例：图标 + 名称 + 占比 + 占比条 + 金额
+ * （替代 Chart.js 内置图例：内置图例既没有分类色，也放不下金额与占比）
+ * @param {Array<{id:string,name:string,icon:string,color:string,total:number}>} items
+ * @param {number} total 合计金额（算占比用）
+ */
+function renderPieLegend(items, total) {
+  var el = $('pie-legend');
+  if (!el) return;
+  if (!items.length) { el.innerHTML = ''; return; }
+  var html = '';
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i];
+    var pct = total > 0 ? (it.total / total) * 100 : 0;
+    var pctText = pct > 0 && pct < 1 ? '&lt;1' : String(Math.round(pct));
+    html += '<div class="pl-row">' +
+      '<div class="pl-head">' +
+        catIconHTML(it, 'pl-icon', 'ic-sm') +
+        '<span class="pl-name">' + esc(it.name) + '</span>' +
+        '<span class="pl-pct">' + pctText + '%</span>' +
+        '<span class="pl-amount">¥' + f(it.total) + '</span>' +
+      '</div>' +
+      '<span class="pl-track"><span class="pl-bar" style="width:' +
+        Math.max(pct, 1.5) + '%;background:' + esc(it.color) + '"></span></span>' +
+      '</div>';
+  }
+  el.innerHTML = html;
+}
+
 function renderStats() {
   try { Insights.render(currentYm); }   // 顶部智能洞察卡（失败不影响报表主体）
   catch (e) { console.warn('[app.js] 洞察卡渲染失败：', e); }
@@ -506,15 +725,21 @@ function renderStats() {
     '<div class="summary-item"><span class="summary-label">笔数</span><span class="summary-value" data-cu="' + s.count + '" data-int="1">' + s.count + '</span></div>';
   animateCountUps($('stat-summary'));
 
-  // 分类占比（支出/收入切换）
+  // 分类占比（支出/收入切换）：环形图 + 下方的图例列表
   var src = pieKind === 'income' ? s.incomeByCategory : s.byCategory;
   var pieItems = [];
+  var pieTotal = 0;
   for (var i = 0; i < src.length; i++) {
     pieItems.push({ name: src[i].name, value: src[i].total, color: src[i].color });
+    pieTotal += src[i].total;
   }
   $('pie-empty').textContent = pieKind === 'income' ? '本月暂无收入数据' : '本月暂无支出数据';
   $('pie-empty').classList.toggle('hidden', pieItems.length > 0);
-  Charts.renderCategoryPie($('pie-chart'), pieItems, pieKind === 'income' ? '本月收入' : '本月支出');
+  Charts.renderCategoryPie($('pie-chart'), pieItems, {
+    title: pieKind === 'income' ? '本月收入' : '本月支出',
+    count: pieItems.length ? pieItems.length + ' 笔' : ''
+  });
+  renderPieLegend(src, pieTotal);
 
   // 每日趋势（支出/收入双系列）
   var days = [];
@@ -602,8 +827,8 @@ function renderCompare(s) {
     else if (pct > 0) pctHtml = '<span class="cmp-pct up">↑' + pct + '%</span>';
     else if (pct < 0) pctHtml = '<span class="cmp-pct down">↓' + Math.abs(pct) + '%</span>';
     else pctHtml = '<span class="cmp-pct">持平</span>';
-    html += '<div class="compare-row"><span class="cmp-icon">' + esc(c.icon) +
-      '</span><span class="cmp-name">' + esc(c.name) +
+    html += '<div class="compare-row">' + catIconHTML(c, 'cmp-icon', 'ic-sm') +
+      '<span class="cmp-name">' + esc(c.name) +
       '</span><div class="cmp-track"><div class="cmp-bar" style="width:' +
       Math.round(c.total / max * 100) + '%;background:' + esc(c.color) + '"></div></div>' +
       '<span class="cmp-amount">¥' + f(c.total) + '</span>' + pctHtml + '</div>';
@@ -633,7 +858,7 @@ function renderBudget() {
     } else {
       stats.innerHTML = '已用 <b>¥' + f(status.spent) + '</b> / ¥' + f(status.budget) +
         ' · 剩余 ¥' + f(status.remaining) + '（已用 ' + status.usedPct + '%）' +
-        (status.level === 'warn' ? ' · ⚠️ 快到预算上限了' : '');
+        (status.level === 'warn' ? ' · 快到预算上限了' : '');
     }
   }
 
@@ -648,8 +873,8 @@ function renderBudget() {
     var html = '';
     for (var i = 0; i < s.byCategory.length; i++) {
       var c = s.byCategory[i];
-      html += '<div class="bcat-row"><span class="bcat-icon">' + esc(c.icon) +
-        '</span><span class="bcat-name">' + esc(c.name) +
+      html += '<div class="bcat-row">' + catIconHTML(c, 'bcat-icon', 'ic-sm') +
+        '<span class="bcat-name">' + esc(c.name) +
         '</span><div class="bcat-bar-track"><div class="bcat-bar" style="width:' +
         Math.round(c.total / max * 100) + '%;background:' + esc(c.color) + '"></div></div>' +
         '<span class="bcat-amount">¥' + f(c.total) + '</span></div>';
@@ -675,9 +900,9 @@ function renderCategoryBudgets() {
     var note = it.level === 'over'
       ? '<span class="over-text">已超支 ¥' + f(it.spent - it.budget) + '</span>'
       : '剩余 ¥' + f(it.remaining) + '（已用 ' + it.usedPct + '%）' +
-        (it.level === 'warn' ? ' · ⚠️ 快到上限了' : '');
+        (it.level === 'warn' ? ' · 快到上限了' : '');
     html += '<div class="cbud-row" data-id="' + esc(it.categoryId) + '">' +
-      '<span class="cbud-icon">' + esc(it.icon) + '</span>' +
+      catIconHTML({ id: it.categoryId, name: it.name, icon: it.icon, color: it.color }, 'cbud-icon') +
       '<div class="cbud-main">' +
         '<div class="cbud-head"><span class="cbud-name">' + esc(it.name) + '</span>' +
         '<span class="cbud-amount">¥' + f(it.spent) + ' / ¥' + f(it.budget) + '</span></div>' +
@@ -694,8 +919,8 @@ function renderCatBudgetPicker(cats, selectedId) {
   var html = '';
   for (var i = 0; i < cats.length; i++) {
     html += '<button type="button" class="cat-item' + (cats[i].id === selectedId ? ' selected' : '') +
-      '" data-id="' + esc(cats[i].id) + '"><span class="cat-icon">' + esc(cats[i].icon) +
-      '</span><span class="cat-name">' + esc(cats[i].name) + '</span></button>';
+      '" data-id="' + esc(cats[i].id) + '">' + catIconHTML(cats[i], 'cat-icon') +
+      '<span class="cat-name">' + esc(cats[i].name) + '</span></button>';
   }
   $('catbudget-categories').innerHTML = html;
 }
@@ -763,20 +988,27 @@ function budgetSave() {
     }
   } catch (e) { toast(e.message); return; }
   renderBudget();
+  renderHero();                                  // 英雄卡里的预算进度同步
   refreshBanner();
 }
 
 /* ================= 提醒横幅 ================= */
+
+/** 横幅内容：图标 + 文案（情绪靠图标与底色表达，不用 emoji） */
+function bannerHTML(icon, text) {
+  return Icons.svg(icon, 'banner-ic') + '<span>' + esc(text) + '</span>';
+}
 
 function refreshBanner() {
   var banner = $('budget-banner');
   var status = Store.getBudgetStatus(Store.currentYm());
   if (status.level === 'warn') {
     banner.className = 'banner banner-warn';
-    banner.textContent = '⚠️ 本月预算已用 ' + status.usedPct + '%，剩余 ¥' + f(status.remaining) + '，省着点花~';
+    banner.innerHTML = bannerHTML('warn', '本月预算已用 ' + status.usedPct + '%，剩余 ¥' +
+      f(status.remaining) + '，省着点花~');
   } else if (status.level === 'over') {
     banner.className = 'banner banner-over';
-    banner.textContent = '🚨 本月已超支 ¥' + f(Math.abs(status.remaining)) + '，注意控制开销！';
+    banner.innerHTML = bannerHTML('warn', '本月已超支 ¥' + f(Math.abs(status.remaining)) + '，注意控制开销！');
   } else {
     banner.className = 'banner hidden';
   }
@@ -794,7 +1026,7 @@ function checkReminders() {
   var hour = new Date().getHours();
   if (hour >= 20 && !hasToday) {
     info.className = 'banner banner-info';
-    info.textContent = '🌙 今天还没有记账哦，花销别忘啦~';
+    info.innerHTML = bannerHTML('calendar', '今天还没有记账哦，花销别忘啦~');
   } else {
     info.className = 'banner hidden';
   }
@@ -807,9 +1039,9 @@ function renderBackupHint() {
   var b = data ? data.lastBackupAt : null;
   var days = b ? Math.floor((Date.now() - b) / 86400000) : null;
   if (records.length && (days === null || days >= 7)) {
-    el.textContent = days === null
-      ? '⚠️ 还没有导出过备份，建议立即导出一份'
-      : '⚠️ 已 ' + days + ' 天未备份，建议导出一份完整备份';
+    el.innerHTML = bannerHTML('warn', days === null
+      ? '还没有导出过备份，建议立即导出一份'
+      : '已 ' + days + ' 天未备份，建议导出一份完整备份');
     el.classList.remove('hidden');
   } else {
     el.classList.add('hidden');
@@ -830,11 +1062,13 @@ function renderCategoryManage() {
     html += '<div class="mcat-group-title">' + groups[g].title + '</div>';
     for (var i = 0; i < cats.length; i++) {
       var c = cats[i];
-      html += '<div class="mcat-row"><span class="mcat-icon">' + esc(c.icon) +
-        '</span><span class="mcat-name">' + esc(c.name) +
+      html += '<div class="mcat-row">' + catIconHTML(c, 'mcat-icon') +
+        '<span class="mcat-name">' + esc(c.name) +
         '</span><span class="mcat-actions">' +
-        '<button type="button" class="btn-icon" data-act="edit" data-id="' + esc(c.id) + '">✏️</button>' +
-        '<button type="button" class="btn-icon" data-act="del" data-id="' + esc(c.id) + '">🗑️</button>' +
+        '<button type="button" class="btn-icon" title="编辑" data-act="edit" data-id="' + esc(c.id) + '">' +
+        Icons.svg('edit', 'ic-sm') + '</button>' +
+        '<button type="button" class="btn-icon" title="删除" data-act="del" data-id="' + esc(c.id) + '">' +
+        Icons.svg('del', 'ic-sm') + '</button>' +
         '</span></div>';
     }
   }
@@ -897,11 +1131,12 @@ function openRecordModal(id) {
   if (!r) return;
   editingRecordId = id;
   editCat = r.categoryId;
-  $('edit-amount').value = f(r.amount);
+  $('edit-amount').value = Store.formatAmount(r.amount);   // 输入框要纯数字，不能用带千分位的 f()
   $('edit-date').value = r.date;
   $('edit-note').value = r.note || '';
   setEditType(r.type || 'expense');
   renderEditItems(r.items || []);
+  setItemsExpanded(false);                 // 明细默认收起成一行摘要，避免弹窗一开就占满屏
   $('modal-record').classList.remove('hidden');
 }
 
@@ -923,7 +1158,7 @@ function addItemRow(item) {
     '<input type="text" maxlength="30" placeholder="商品名" value="' + esc(it.name || '') + '">' +
     '<input type="text" inputmode="decimal" placeholder="数量" value="' + (it.qty != null ? it.qty : 1) + '">' +
     '<input type="text" inputmode="decimal" placeholder="单价" value="' + (it.price != null ? it.price : '') + '">' +
-    '<button type="button" class="btn-icon" title="删除">🗑️</button>';
+    '<button type="button" class="btn-icon" title="删除">' + Icons.svg('del', 'ic-sm') + '</button>';
   $('edit-items-list').appendChild(row);
   updateItemsSum();
 }
@@ -948,11 +1183,27 @@ function collectItems() {
 function updateItemsSum() {
   var items = collectItems();
   var sumEl = $('items-sum');
-  if (!items.length) { sumEl.classList.add('hidden'); return; }
+  var label = $('items-toggle-text');
+  if (!items.length) {
+    sumEl.classList.add('hidden');
+    if (label) label.textContent = '添加商品明细';
+    return;
+  }
   var total = 0;
   for (var i = 0; i < items.length; i++) total += items[i].qty * items[i].price;
-  sumEl.textContent = '明细合计 ¥' + f(Math.round(total * 100) / 100) + '（点金额栏可手动改成一致）';
+  var sum = Math.round(total * 100) / 100;
+  sumEl.textContent = '明细合计 ¥' + f(sum) + '（点金额栏可手动改成一致）';
   sumEl.classList.remove('hidden');
+  if (label) label.textContent = items.length + ' 件 · 合计 ¥' + f(sum);   // 折叠时的那行摘要
+}
+
+/** 商品明细：折叠成一行摘要 / 展开编辑 */
+function setItemsExpanded(open) {
+  var box = $('items-editor');
+  var btn = $('items-toggle-btn');
+  if (!box || !btn) return;
+  box.classList.toggle('collapsed', !open);
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
 
 /* ---------- 购物清单导入 ---------- */
@@ -998,7 +1249,7 @@ function saveShopping() {
   $('shopping-text').value = '';
   updateShoppingPreview();
   toggleShoppingCard(false);
-  toast('已记 ' + res.items.length + ' 件商品，合计 ¥' + f(res.total) + ' ✓');
+  successFlash('已记 ' + res.items.length + ' 件 · 合计 ¥' + f(res.total));
   renderRecordList();
   refreshBanner();
   checkReminders();
@@ -1063,12 +1314,49 @@ function importJSON(file) {
     toast('恢复成功 ✓');
     renderCategoryManage();
     renderBackupHint();
+    renderRecordList();                       // 恢复后明细与英雄卡同步刷新
     refreshBanner();
   };
   reader.readAsText(file, 'utf-8');
 }
 
 /* ================= 事件绑定与启动 ================= */
+
+/**
+ * 抽屉把手下拉关闭：按住把手往下拖，超过 80px 松手即关闭，否则弹回原位。
+ * 只挂在把手上（不劫持弹窗内容），所以不影响内部滚动与输入。
+ */
+function bindModalDrag(modal) {
+  var body = modal.querySelector('.modal-body');
+  var handle = modal.querySelector('.modal-handle');
+  if (!body || !handle) return;
+  var startY = 0;
+  var dy = 0;
+  var dragging = false;
+
+  handle.addEventListener('pointerdown', function (e) {
+    dragging = true;
+    startY = e.clientY;
+    dy = 0;
+    body.style.transition = 'none';
+    try { handle.setPointerCapture(e.pointerId); } catch (err) { /* 忽略 */ }
+  });
+  handle.addEventListener('pointermove', function (e) {
+    if (!dragging) return;
+    dy = Math.max(0, e.clientY - startY);
+    body.style.transform = 'translateY(' + dy + 'px)';
+  });
+  function endDrag() {
+    if (!dragging) return;
+    dragging = false;
+    body.style.transition = '';              // 交还给 CSS 的过渡（弹回）
+    body.style.transform = '';
+    if (dy > 80) modal.classList.add('hidden');
+    dy = 0;
+  }
+  handle.addEventListener('pointerup', endDrag);
+  handle.addEventListener('pointercancel', endDrag);
+}
 
 function bindEvents() {
   // 底部导航
@@ -1241,7 +1529,10 @@ function bindEvents() {
     renderCategoryGrid($('edit-categories'), editType, editCat);
   });
 
-  // 商品明细编辑器
+  // 商品明细编辑器（默认折叠，点摘要行展开）
+  $('items-toggle-btn').addEventListener('click', function () {
+    setItemsExpanded($('items-editor').classList.contains('collapsed'));
+  });
   $('add-item-btn').addEventListener('click', function () { addItemRow(null); });
   $('edit-items-list').addEventListener('click', function (e) {
     var btn = e.target.closest('.btn-icon');
@@ -1251,9 +1542,25 @@ function bindEvents() {
   });
   $('edit-items-list').addEventListener('input', updateItemsSum);
 
+  // 空状态里的行动按钮（记一笔 / 清空搜索）
+  $('view-record').addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-empty-act]');
+    if (!btn) return;
+    var act = btn.getAttribute('data-empty-act');
+    if (act === 'focus-amount') {
+      $('quick-amount').focus();
+    } else if (act === 'clear-search') {
+      $('search-input').value = '';
+      renderRecordList();
+    }
+  });
+
+  // 抽屉把手：下拉关闭
+  var modals = document.querySelectorAll('.modal');
+  for (var mi = 0; mi < modals.length; mi++) bindModalDrag(modals[mi]);
+
   // 分类弹窗
-  $('category-save-btn').addEventListener('click', categorySave);
-  $('category-cancel-btn').addEventListener('click', function () { $('modal-category').classList.add('hidden'); });
+  $('category-save-btn').addEventListener('click', categorySave);  $('category-cancel-btn').addEventListener('click', function () { $('modal-category').classList.add('hidden'); });
 
   // 修改密码弹窗
   $('pw-cancel-btn').addEventListener('click', function () { $('modal-password').classList.add('hidden'); });

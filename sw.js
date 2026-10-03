@@ -6,13 +6,14 @@
  *       在线打开永远是最新版，离线照常可用，从根上避免「发版后手机读到旧代码」。
  * 注意：CACHE_VERSION 仅用于旧缓存清理；更新内容后习惯性 +1 即可，不再影响新旧。
  */
-var CACHE_VERSION = 'xzb-v18';
+var CACHE_VERSION = 'xzb-v21';
 
 var PRECACHE = [
   './',
   './index.html',
   './manifest.webmanifest',
   './css/style.css',
+  './js/icons.js',
   './js/chart.umd.js',
   './js/auth.js',
   './js/nlp.js',

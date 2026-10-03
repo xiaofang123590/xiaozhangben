@@ -145,8 +145,8 @@ var DietUI = (function () {
       }).filter(Boolean);
       var favChips = '';
       for (var f = 0; f < favFoods.length; f++) {
-        favChips += '<button type="button" class="food-chip" data-id="' + esc(favFoods[f].id) + '">⭐ ' +
-          esc(favFoods[f].name) + '</button>';
+        favChips += '<button type="button" class="food-chip" data-id="' + esc(favFoods[f].id) + '">' +
+          Icons.svg('star', 'ic-xs ic-fill') + esc(favFoods[f].name) + '</button>';
       }
       var chips = '';
       for (var i = 0; i < QUICK_IDS.length; i++) {
@@ -207,8 +207,9 @@ var DietUI = (function () {
       '<div class="pick-head"><span class="pick-name">' + esc(selected.name) + '</span>' +
       '<span class="pick-cat">' + (cat ? cat.icon + ' ' + esc(cat.name) : '') + '</span>' +
       '<button type="button" class="pick-fav' + (isFavorite(selected.id) ? ' on' : '') +
-      '" data-act="toggle-fav">' + (isFavorite(selected.id) ? '★ 已收藏' : '☆ 收藏') + '</button>' +
-      '<button type="button" class="pick-clear" data-act="clear-pick">✕</button></div>' +
+      '" data-act="toggle-fav">' + Icons.svg('star', isFavorite(selected.id) ? 'ic-xs ic-fill' : 'ic-xs') +
+      (isFavorite(selected.id) ? '已收藏' : '收藏') + '</button>' +
+      '<button type="button" class="pick-clear" data-act="clear-pick" aria-label="关闭">' + Icons.svg('close', 'ic-sm') + '</button></div>' +
       '<div class="pick-info">每 100g：' + selected.k + ' 千卡 · 蛋白 ' + selected.p +
       'g · 脂肪 ' + selected.f + 'g · 碳水 ' + selected.c + 'g</div>' +
       '<div class="type-toggle pick-meal-toggle">' + mealBtns + '</div>' +
@@ -281,7 +282,7 @@ var DietUI = (function () {
     selected = null;
     query = '';
     $('food-search-input').value = '';
-    toast('已记录 ' + Math.round(n.kcal) + ' 千卡 ✓');
+    successFlash('已记录 ' + Math.round(n.kcal) + ' 千卡');
     renderSearch();
     renderPick();
     renderOverview();
@@ -304,7 +305,10 @@ var DietUI = (function () {
     $('diet-entries-tools').classList.toggle('hidden', !entries.length && !prevHas);
 
     if (!entries.length) {
-      listEl.innerHTML = '<div class="empty-tip">这一天还没有饮食记录</div>';
+      listEl.innerHTML = '<div class="empty-tip empty-lg">' +
+        '<span class="empty-art"><svg class="ic"><use href="#i-diet"></use></svg></span>' +
+        '<p class="empty-title">这一天还没有饮食记录</p>' +
+        '<p class="empty-sub">在上方「记一餐」里说一句或搜一个食物，就能记上</p></div>'
       return;
     }
 
@@ -321,7 +325,7 @@ var DietUI = (function () {
         var e = mealEntries[j];
         html += '<div class="diet-entry-row"><span class="der-name">' + esc(e.name) + '</span>' +
           '<span class="der-meta">' + e.grams + 'g · ' + e.kcal + ' 千卡</span>' +
-          '<button type="button" class="btn-icon der-del" data-act="del-entry" data-id="' + esc(e.id) + '">✕</button>' +
+          '<button type="button" class="btn-icon der-del" title="删除" data-act="del-entry" data-id="' + esc(e.id) + '">' + Icons.svg('close', 'ic-sm') + '</button>' +
           '</div>';
       }
       html += '</div>';
@@ -467,7 +471,7 @@ var DietUI = (function () {
     var kcalSum = 0;
     var html = '<div class="nlp-preview"><div class="nlp-head"><span>识别为「' +
       Diet.mealName(nlpResult.meal) + '」</span>' +
-      '<button type="button" class="nlp-close" data-act="nlp-close" title="关闭并清空">✕ 关闭</button></div>';
+      '<button type="button" class="nlp-close" data-act="nlp-close" title="关闭并清空">' + Icons.svg('close', 'ic-xs') + '关闭</button></div>';
     for (var i = 0; i < nlpResult.items.length; i++) {
       var it = nlpResult.items[i];
       if (it.matched) {
@@ -520,7 +524,7 @@ var DietUI = (function () {
     nlpResult = null;
     $('diet-nlp-input').value = '';
     $('diet-nlp-preview').innerHTML = '';
-    toast('已记录 ' + added + ' 项 ✓');
+    successFlash('已记录 ' + added + ' 项');
     renderOverview();
     renderEntries();
     renderAdvice();
@@ -545,7 +549,7 @@ var DietUI = (function () {
         '<span class="combo-name">' + esc(c.name) + '</span>' +
         '<span class="combo-meta">' + c.items.length + ' 项 · ' + Math.round(kcalSum) + ' 千卡</span>' +
         '<button type="button" class="btn-secondary btn-sm" data-act="apply-combo" data-id="' + esc(c.id) + '">一键添加</button>' +
-        '<button type="button" class="btn-icon" data-act="del-combo" data-id="' + esc(c.id) + '">🗑️</button>' +
+        '<button type="button" class="btn-icon" title="删除" data-act="del-combo" data-id="' + esc(c.id) + '">' + Icons.svg('del', 'ic-sm') + '</button>' +
         '</div>';
     }
     box.innerHTML = html + '</div>';
@@ -578,7 +582,7 @@ var DietUI = (function () {
         added += 1;
       }
     } catch (e) { toast(e.message); return; }
-    toast('已添加「' + combo.name + '」' + added + ' 项 ✓');
+    successFlash('已添加「' + combo.name + '」' + added + ' 项');
     renderOverview();
     renderEntries();
     renderAdvice();
@@ -618,7 +622,7 @@ var DietUI = (function () {
         added += 1;
       }
     } catch (err) { toast(err.message); return; }
-    toast('已复制 ' + added + ' 项 ✓');
+    successFlash('已复制 ' + added + ' 项');
     renderOverview();
     renderEntries();
     renderAdvice();

@@ -115,6 +115,18 @@ var Store = (function () {
   /** 分类信息缺失时的兜底显示（例如导入数据里指向了不存在的分类） */
   var FALLBACK_CATEGORY = { name: '未知分类', icon: '🏷️', color: '#90A4AE' };
 
+  /**
+   * 内置分类 id → 线性图标名（图标见 js/icons.js）。
+   * 只对「图标仍是出厂 emoji」的内置分类生效：用户在分类管理里改过图标，
+   * 或自行新增的分类（custom: true），一律继续显示他自己的 emoji。
+   */
+  var CATEGORY_ICONS = {
+    canyin: 'food', jiaotong: 'transport', gouwu: 'shopping', yule: 'fun', riyong: 'daily',
+    juzhu: 'home', yiliao: 'medical', xuexi: 'study', renqing: 'social', qita: 'other',
+    gongzi: 'salary', jianzhi: 'parttime', licai: 'invest', hongbao: 'redpacket',
+    tuikuan: 'refund', qitashouru: 'otherincome'
+  };
+
   /** 合法日期字符串：YYYY-MM-DD，且月/日取值范围正确 */
   var DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
@@ -2050,7 +2062,7 @@ var Store = (function () {
   // ==================== 对外 API：格式化与日期工具 ====================
 
   /**
-   * 金额格式化为两位小数字符串
+   * 金额格式化为两位小数字符串（数据层：CSV、商品明细、搜索匹配等，不带千分位）
    * @param {*} n
    * @returns {string} 如 '25.50'；非法输入兜底为 '0.00'
    */
@@ -2060,6 +2072,41 @@ var Store = (function () {
       num = 0;
     }
     return num.toFixed(2);
+  }
+
+  /**
+   * 金额格式化为带千分位的展示字符串（展示层专用：界面上的金额都走这个）
+   * @param {*} n
+   * @returns {string} 如 '7,848.50'；非法输入兜底为 '0.00'
+   */
+  function formatMoney(n) {
+    var num = Number(n);
+    if (!isFinite(num)) {
+      num = 0;
+    }
+    var neg = num < 0;
+    var fixed = Math.abs(num).toFixed(2);
+    var dot = fixed.indexOf('.');
+    var intPart = fixed.slice(0, dot).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return (neg ? '-' : '') + intPart + fixed.slice(dot);
+  }
+
+  /**
+   * 分类对应的线性图标名；图标已被用户改过、或分类是用户自建时返回 null（继续用 emoji）
+   * @param {Object} cat 分类对象
+   * @returns {?string} 如 'food'；不适用时为 null
+   */
+  function categoryIconName(cat) {
+    if (!cat || cat.custom) return null;
+    var name = CATEGORY_ICONS[cat.id];
+    if (!name) return null;
+    var defaults = DEFAULT_CATEGORIES.concat(DEFAULT_INCOME_CATEGORIES);
+    for (var i = 0; i < defaults.length; i++) {
+      if (defaults[i].id === cat.id) {
+        return cat.icon === defaults[i].icon ? name : null;
+      }
+    }
+    return null;
   }
 
   /**
@@ -2141,6 +2188,8 @@ var Store = (function () {
     exportCSV: exportCSV,
     // 工具
     formatAmount: formatAmount,
+    formatMoney: formatMoney,
+    categoryIconName: categoryIconName,
     todayStr: todayStr,
     ymOf: ymOf,
     currentYm: currentYm
