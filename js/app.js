@@ -1151,10 +1151,32 @@ function registerServiceWorker() {
   // Service Worker 只在 https 或 localhost 下可用；双击 file:// 打开时跳过（功能不受影响）
   var local = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   if (location.protocol !== 'https:' && !local) return;
+
+  // 新 SW 接管（skipWaiting + claim）时自动刷新一次，让更新立即生效，无需手动刷新两次。
+  // 首次安装例外：页面本来就是最新加载的，接管无需刷新。
+  var firstInstall = !navigator.serviceWorker.controller;
+  var reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function () {
+    if (firstInstall || reloaded) return;
+    reloaded = true;
+    location.reload();
+  });
+
+  var swReg = null;
   navigator.serviceWorker.register('sw.js').then(function (reg) {
     console.log('[PWA] 离线缓存就绪', reg.scope);
+    swReg = reg;
+    // 打开页面时主动查一次更新（配合 sw.js 网络优先，在线即最新）
+    try { reg.update().catch(function () { /* 忽略 */ }); } catch (e) { /* 忽略 */ }
   }).catch(function (e) {
     console.warn('[PWA] Service Worker 注册失败：', e);
+  });
+
+  // 切回前台时也查一次更新：后台放了几天的 PWA，一打开就自动升级
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && swReg) {
+      try { swReg.update().catch(function () { /* 忽略 */ }); } catch (e) { /* 忽略 */ }
+    }
   });
 }
 

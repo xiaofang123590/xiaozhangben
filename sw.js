@@ -1,11 +1,12 @@
 /**
  * sw.js —— 小账本 · Service Worker（离线缓存）
  *
- * 策略：缓存优先，未命中时请求网络并回填缓存；离线且未缓存时退回 index.html。
- * 注意：以后更新了 css/js/图标 内容，请把 CACHE_VERSION 号 +1，否则手机上
- *       可能一直读到旧缓存。
+ * 策略：网络优先（cache: 'no-cache' 协商缓存，内容未变时服务器返回 304 代价很小），
+ *       成功后回填缓存；断网时回退缓存，导航请求最终退回 index.html。
+ *       在线打开永远是最新版，离线照常可用，从根上避免「发版后手机读到旧代码」。
+ * 注意：CACHE_VERSION 仅用于旧缓存清理；更新内容后习惯性 +1 即可，不再影响新旧。
  */
-var CACHE_VERSION = 'xzb-v7';
+var CACHE_VERSION = 'xzb-v8';
 
 var PRECACHE = [
   './',
@@ -54,17 +55,21 @@ self.addEventListener('activate', function (event) {
 
 self.addEventListener('fetch', function (event) {
   if (event.request.method !== 'GET') return;
+  var url;
+  try { url = new URL(event.request.url); } catch (e) { return; }
+  if (url.origin !== self.location.origin) return;   // 只处理本站同源请求
+
+  // 网络优先：拿到新响应就回填当前版本缓存；网络失败回退缓存（离线兜底）
   event.respondWith(
-    caches.match(event.request).then(function (cached) {
-      if (cached) return cached;
-      return fetch(event.request).then(function (response) {
-        // 只缓存本站同源响应
-        if (response && response.ok && new URL(event.request.url).origin === self.location.origin) {
-          var copy = response.clone();
-          caches.open(CACHE_VERSION).then(function (cache) { cache.put(event.request, copy); });
-        }
-        return response;
-      }).catch(function () {
+    fetch(event.request, { cache: 'no-cache' }).then(function (response) {
+      if (response && response.ok) {
+        var copy = response.clone();
+        caches.open(CACHE_VERSION).then(function (cache) { cache.put(event.request, copy); });
+      }
+      return response;
+    }).catch(function () {
+      return caches.match(event.request).then(function (cached) {
+        if (cached) return cached;
         // 离线且未缓存：页面导航请求退回 index.html
         if (event.request.mode === 'navigate') return caches.match('./index.html');
       });
