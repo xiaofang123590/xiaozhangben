@@ -5,7 +5,7 @@
  * 注意：以后更新了 css/js/图标 内容，请把 CACHE_VERSION 号 +1，否则手机上
  *       可能一直读到旧缓存。
  */
-var CACHE_VERSION = 'xzb-v3';
+var CACHE_VERSION = 'xzb-v5';
 
 var PRECACHE = [
   './',
@@ -29,9 +29,15 @@ var PRECACHE = [
 
 self.addEventListener('install', function (event) {
   event.waitUntil(
-    caches.open(CACHE_VERSION)
-      .then(function (cache) { return cache.addAll(PRECACHE); })
-      .then(function () { return self.skipWaiting(); })
+    caches.open(CACHE_VERSION).then(function (cache) {
+      // 逐条用 cache: 'reload' 预缓存：强制绕过 HTTP 缓存取最新文件。
+      // 不能用 cache.addAll(PRECACHE)——它会走 HTTP 缓存，发版后一段
+      // 时间内（如 GitHub Pages 的 max-age=600）可能把旧文件存进新版本
+      // 缓存，导致「版本号升了、代码还是旧的」的隐蔽问题。
+      return Promise.all(PRECACHE.map(function (url) {
+        return cache.add(new Request(url, { cache: 'reload' }));
+      }));
+    }).then(function () { return self.skipWaiting(); })
   );
 });
 

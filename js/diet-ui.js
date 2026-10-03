@@ -233,6 +233,37 @@ var DietUI = (function () {
     renderPick();
   }
 
+  /** 把当前选中的食物按当前份量/餐次写入记录 */
+  function addEntry() {
+    if (!selected) return;
+    var grams = pickGrams();
+    if (!isFinite(grams) || grams <= 0) { toast('请输入正确的份量'); return; }
+    var n = Diet.computeNutrition(selected, grams);
+    try {
+      Store.addDietEntry({
+        date: date,
+        meal: meal,
+        foodId: selected.id,
+        name: selected.name,
+        cat: selected.cat,
+        grams: grams,
+        kcal: n.kcal,
+        protein: n.protein,
+        fat: n.fat,
+        carb: n.carb
+      });
+    } catch (e) { toast(e.message); return; }
+    selected = null;
+    query = '';
+    $('food-search-input').value = '';
+    toast('已记录 ' + Math.round(n.kcal) + ' 千卡 ✓');
+    renderSearch();
+    renderPick();
+    renderOverview();
+    renderEntries();
+    renderAdvice();
+  }
+
   /* ==================== 渲染：当日记录 ==================== */
 
   function renderEntries() {
