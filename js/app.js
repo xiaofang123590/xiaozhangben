@@ -125,8 +125,16 @@ function updateMonthLabel() {
 
 /* ================= 主题（明暗 data-mode × 风格 data-accent 双维度） ================= */
 
-var ACCENTS = ['mint', 'ocean', 'sunset', 'dusk', 'ink'];
-var ACCENT_NAMES = { mint: '薄荷绿', ocean: '深海蓝', sunset: '落日橙', dusk: '暮山紫', ink: '墨玉黑金' };
+var ACCENTS = ['mint', 'ocean', 'sunset', 'dusk', 'ink', 'celadon', 'graphite', 'sakura'];
+var ACCENT_NAMES = {
+  mint: '薄荷绿', ocean: '深海蓝', sunset: '落日橙', dusk: '暮山紫', ink: '墨玉黑金',
+  celadon: '青瓷', graphite: '石墨', sakura: '樱花'
+};
+var ACCENT_DESC = {
+  mint: '清透薄荷 · 轻盈日常', ocean: '深海静蓝 · 专注理性', sunset: '落日暖橙 · 热烈有温度',
+  dusk: '暮山雾紫 · 浪漫温柔', ink: '玄黑鎏金 · 沉稳贵气', celadon: '釉色青瓷 · 温润清雅',
+  graphite: '极简石墨 · 冷静克制', sakura: '樱花柔粉 · 轻盈治愈'
+};
 
 var PREF = { mode: 'auto', accent: 'mint' };   // 用户偏好：mode = auto | light | dark
 var mqDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
@@ -197,13 +205,36 @@ function renderThemeToggle() {
   }
 }
 
+/** 生成风格色板预览卡（迷你手机屏样式，预览色见 style.css 第 38 节的 --pv-* 表）
+ *  只生成一次；预览的明暗版本由 CSS 按 body[data-mode] 自动切换 */
+function buildAccentGrid() {
+  var box = $('accent-toggle');
+  if (!box || box.children.length) return;
+  var html = '';
+  for (var i = 0; i < ACCENTS.length; i++) {
+    var a = ACCENTS[i], n = ACCENT_NAMES[a];
+    html += '<button type="button" class="accent-card" data-accent="' + a + '"' +
+            ' aria-label="' + n + '" title="' + n + '">' +
+              '<span class="accent-preview" aria-hidden="true">' +
+                '<span class="pv-card"></span><span class="pv-dot"></span>' +
+                '<span class="pv-line"></span><span class="pv-pill"></span>' +
+              '</span>' +
+              '<span class="accent-name">' + n + '</span>' +
+            '</button>';
+  }
+  box.innerHTML = html;
+}
+
 function renderAccentToggle() {
-  var btns = document.querySelectorAll('#accent-toggle .accent-dot');
+  buildAccentGrid();
+  var btns = document.querySelectorAll('#accent-toggle .accent-card');
   for (var i = 0; i < btns.length; i++) {
     btns[i].classList.toggle('active', btns[i].getAttribute('data-accent') === PREF.accent);
   }
   var name = $('accent-name');
   if (name) name.textContent = ACCENT_NAMES[PREF.accent] || ACCENT_NAMES.mint;
+  var desc = $('accent-desc');
+  if (desc) desc.textContent = ACCENT_DESC[PREF.accent] || '';
 }
 
 /** 主题变化后刷新当前页里吃主题色的渲染（图表等） */
@@ -308,6 +339,19 @@ function renderRecordList() {
 
   $('record-empty').classList.toggle('hidden', searchMode || records.length > 0);
   $('search-empty').classList.toggle('hidden', !searchMode || records.length > 0);
+
+  // 明细章节头的汇总：当前筛选结果的支出 / 收入合计（无记录时留空）
+  var sumExp = 0, sumInc = 0;
+  for (var s = 0; s < records.length; s++) {
+    if (records[s].type === 'income') sumInc += records[s].amount;
+    else sumExp += records[s].amount;
+  }
+  var sumEl = $('record-sum');
+  if (sumEl) {
+    sumEl.textContent = records.length
+      ? '支出 ¥' + f(sumExp) + ' · 收入 ¥' + f(sumInc) : '';
+  }
+
   if (!records.length) { list.innerHTML = ''; return; }
 
   // 逐日聚合
@@ -949,9 +993,9 @@ function bindEvents() {
     if (btn) applyTheme(btn.getAttribute('data-theme'));
   });
 
-  // 主题：风格色板
+  // 主题：风格色板（预览卡网格）
   $('accent-toggle').addEventListener('click', function (e) {
-    var btn = e.target.closest('.accent-dot');
+    var btn = e.target.closest('.accent-card');
     if (btn) applyAccent(btn.getAttribute('data-accent'));
   });
 

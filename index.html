@@ -79,18 +79,31 @@
           <input id="quick-amount" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off">
           <button id="quick-save-btn" class="btn-primary">记一笔</button>
         </div>
+        <div class="field-caption">选择分类</div>
         <div id="quick-categories" class="category-grid"></div>
+        <div class="field-caption">日期与备注</div>
         <div class="quick-meta-row">
           <input id="quick-date" type="date">
           <input id="quick-note" type="text" placeholder="备注（可选）" maxlength="30" autocomplete="off">
         </div>
+      </div>
+
+      <!-- 智能记账：一句话解析成多笔 + 购物清单导入入口 -->
+      <div class="card" id="smart-card">
+        <h3 class="card-title">智能记账</h3>
         <div class="smart-row">
-          <input id="smart-input" type="text" maxlength="40" placeholder="智能记账：试试「昨天打车23块」" autocomplete="off">
+          <input id="smart-input" type="text" maxlength="40" placeholder="粘贴一句话，如：昨天打车23块" autocomplete="off">
           <button id="smart-parse-btn" class="btn-secondary btn-sm">解析</button>
         </div>
-        <div class="quick-tools-row">
-          <button id="toggle-shopping-btn" class="btn-secondary btn-sm">🛒 导入购物清单</button>
-        </div>
+        <p class="hint">自动识别时间、分类和金额，按回车也能解析；识别结果会填进上方表单，确认无误再点「记一笔」。</p>
+        <button type="button" id="toggle-shopping-btn" class="row-entry">
+          <span class="row-entry-icon">🛒</span>
+          <span class="row-entry-main">
+            <span class="row-entry-title">导入购物清单</span>
+            <span class="row-entry-sub">粘贴多行商品与小计，一次记成带明细的账单</span>
+          </span>
+          <span class="row-entry-arrow">›</span>
+        </button>
       </div>
 
       <!-- 购物清单导入（粘贴多行文本 → 一条购物账单 + 商品明细） -->
@@ -106,6 +119,10 @@
         </div>
       </div>
 
+      <div class="section-head">
+        <h3 class="section-title">明细</h3>
+        <span id="record-sum" class="section-sum"></span>
+      </div>
       <div class="search-row card">
         <input id="search-input" type="text" placeholder="搜索备注 / 分类 / 金额" autocomplete="off">
         <select id="search-scope">
@@ -267,20 +284,15 @@
       </div>
       <div class="card">
         <h3 class="card-title">外观</h3>
+        <div class="accent-label">明暗</div>
         <div class="type-toggle theme-toggle" id="theme-toggle">
           <button type="button" class="type-btn" data-theme="auto">跟随系统</button>
           <button type="button" class="type-btn" data-theme="light">浅色</button>
           <button type="button" class="type-btn" data-theme="dark">深色</button>
         </div>
         <div class="accent-block">
-          <div class="accent-label">主题风格 · <b id="accent-name">薄荷绿</b></div>
-          <div class="accent-row" id="accent-toggle">
-            <button type="button" class="accent-dot active" data-accent="mint" style="--dot:#00B578" aria-label="薄荷绿" title="薄荷绿"></button>
-            <button type="button" class="accent-dot" data-accent="ocean" style="--dot:#2E7CF6" aria-label="深海蓝" title="深海蓝"></button>
-            <button type="button" class="accent-dot" data-accent="sunset" style="--dot:#F2622F" aria-label="落日橙" title="落日橙"></button>
-            <button type="button" class="accent-dot" data-accent="dusk" style="--dot:#8B6CF0" aria-label="暮山紫" title="暮山紫"></button>
-            <button type="button" class="accent-dot" data-accent="ink" style="--dot:#D9A441" aria-label="墨玉黑金" title="墨玉黑金"></button>
-          </div>
+          <div class="accent-label">主题风格 · <b id="accent-name">薄荷绿</b><span class="accent-desc" id="accent-desc"></span></div>
+          <div class="accent-grid" id="accent-toggle"></div>
         </div>
       </div>
       <div class="card">

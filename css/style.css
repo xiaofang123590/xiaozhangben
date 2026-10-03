@@ -468,6 +468,111 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   padding: 9px 12px;
 }
 
+/* ---- 6.1 记账页细分：字段小标题 / 页面级章节头 / 列表行入口 ---- */
+
+/* 卡片内分段小标题：右接渐隐细线，把「分类 / 日期与备注」等段落清晰分开 */
+.field-caption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 8px;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--text-faint);
+}
+.field-caption::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--divider-soft), transparent);
+}
+/* 小标题自带间距，紧跟其后的块不再叠加顶部外边距 */
+.field-caption + .category-grid,
+.field-caption + .quick-meta-row { margin-top: 0; }
+
+/* 页面级章节头（卡片外，如「明细」）：沿用卡片标题的竖条样式 */
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 2px 10px;
+}
+.section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-main);
+  padding-left: 9px;
+  border-left: 4px solid var(--primary);
+  border-radius: 2px;
+  line-height: 1.3;
+}
+.section-sum {
+  font-size: 12px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 智能记账卡：标题下紧接输入行；购物清单入口为 iOS 风格列表行 */
+#smart-card .smart-row { margin-top: 0; }
+.row-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-top: 14px;
+  padding: 11px 12px;
+  background: var(--surface-soft);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  text-align: left;
+  transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.row-entry:active {
+  transform: scale(0.985);
+  background: var(--surface-2);
+  border-color: var(--primary-border);
+}
+.row-entry-icon {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.12), rgba(var(--primary-rgb), 0.05));
+}
+.row-entry-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.row-entry-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-main);
+}
+.row-entry-sub {
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row-entry-arrow {
+  flex-shrink: 0;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-faint);
+  transition: transform 0.22s ease;
+}
+/* 展开购物清单卡时，箭头转向下（:has 与全站深色解析用同一代浏览器能力） */
+#smart-card:has(+ #shopping-card:not(.hidden)) .row-entry-arrow { transform: rotate(90deg); }
+
 /* ----------------------------------------------------------------------
    7. 分类九宫格（JS 动态生成：#quick-categories / #edit-categories）
    ---------------------------------------------------------------------- */
@@ -1382,12 +1487,15 @@ body[data-mode="dark"] #quick-amount::placeholder { color: #5C6E66; }
 }
 .smart-row .btn-sm { flex-shrink: 0; }   /* 「解析」按钮复用第 4 节 .btn-sm */
 
-/* ---- 31.3 搜索行（.search-row.card：#search-input + #search-scope） ---- */
+/* ---- 31.3 搜索行（.search-row.card：#search-input + #search-scope，滚动时吸顶） ---- */
 .search-row {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 10px 12px;              /* 覆盖 .card 的 16px 内边距 */
+  position: sticky;                /* 流水滚动时工具条吸顶，随时可搜 */
+  top: 6px;
+  z-index: 5;
 }
 #search-input {
   flex: 1;
@@ -1611,12 +1719,7 @@ body[data-mode="dark"] .banner-info {
               0 2px 10px rgba(0, 0, 0, 0.18);
 }
 
-/* ---- 34.6 快捷工具行：右对齐按钮行 ---- */
-.quick-tools-row {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 10px;
-}
+/* ---- 34.6 （原快捷工具行已并入智能记账卡的列表行入口 .row-entry，见 6.1） ---- */
 
 /* ---- 34.7 购物清单导入卡片 ---- */
 #shopping-text {
@@ -2454,8 +2557,138 @@ body[data-accent="ink"][data-mode="dark"] {
   --bg-page: linear-gradient(180deg, #101014 0%, #0C0D10 55%, #0A0B0E 100%);
 }
 
+/* ---- 37.5 青瓷 celadon（浅色 = 釉色青瓷；深色 = 墨青，温润清雅） ---- */
+body[data-accent="celadon"] {
+  --primary:        #3D8C7F;
+  --primary-dark:   #2F7A6E;
+  --primary-deep:   #276A5F;
+  --primary-light:  #E4F1EE;
+  --primary-border: #BCDCD5;
+  --primary-glow:   rgba(61, 140, 127, 0.14);
+  --primary-bright: #57A99A;
+  --primary-rgb:    61, 140, 127;
+  --title-color:    #26403A;
+  --bg-page: linear-gradient(180deg, #DCEFEB 0%, #EFF8F6 45%, #FBFEFD 100%);
+}
+body[data-accent="celadon"][data-mode="dark"] {
+  --primary:        #5FB3A4;
+  --primary-dark:   #79C3B5;
+  --primary-deep:   #93D0C4;
+  --primary-light:  #15302B;
+  --primary-border: #2B4E47;
+  --primary-glow:   rgba(95, 179, 164, 0.22);
+  --primary-bright: #79C3B5;
+  --primary-rgb:    95, 179, 164;
+  --title-color:    #CCE7E0;
+
+  --line:     #243934;
+  --bg-input: #1A2B27;
+  --focus-bg: #1F332E;
+  --placeholder: #61766F;
+  --empty-text: #87A096;
+  --divider-soft: #2A403A;
+
+  --surface:      #152320;
+  --surface-2:    #1C2D29;
+  --surface-soft: #192724;
+  --track:        #1F312C;
+  --card-border:  #243934;
+  --tabbar-bg:    rgba(24, 37, 33, 0.48);
+  --tabbar-line:  rgba(255, 255, 255, 0.13);
+
+  --bg-page: linear-gradient(180deg, #12201C 0%, #0E1917 55%, #0B1311 100%);
+}
+
+/* ---- 37.6 石墨 graphite（浅色 = 石板灰；深色 = 银灰，主色按钮文字换深色） ---- */
+body[data-accent="graphite"] {
+  --primary:        #4B5563;
+  --primary-dark:   #3F4856;
+  --primary-deep:   #343C48;
+  --primary-light:  #EDF0F4;
+  --primary-border: #D2D8E0;
+  --primary-glow:   rgba(75, 85, 99, 0.13);
+  --primary-bright: #6B7686;
+  --primary-rgb:    75, 85, 99;
+  --title-color:    #23272E;
+  --bg-page: linear-gradient(180deg, #E6E9EE 0%, #F3F5F8 45%, #FDFDFE 100%);
+}
+body[data-accent="graphite"][data-mode="dark"] {
+  --primary:        #A8B3C4;
+  --primary-dark:   #BAC4D3;
+  --primary-deep:   #CCD5E1;
+  --primary-light:  #232832;
+  --primary-border: #3A424F;
+  --primary-glow:   rgba(168, 179, 196, 0.20);
+  --primary-bright: #BAC4D3;
+  --primary-rgb:    168, 179, 196;
+  --on-primary:     #171A20;
+  --title-color:    #DCE2EB;
+
+  --line:     #292F39;
+  --bg-input: #1C2129;
+  --focus-bg: #222831;
+  --placeholder: #69717F;
+  --empty-text: #8D95A3;
+  --divider-soft: #2E3540;
+
+  --surface:      #16191F;
+  --surface-2:    #1E232B;
+  --surface-soft: #1A1E25;
+  --track:        #20262E;
+  --card-border:  #292F39;
+  --tabbar-bg:    rgba(25, 29, 36, 0.48);
+  --tabbar-line:  rgba(255, 255, 255, 0.13);
+
+  --bg-page: linear-gradient(180deg, #14171C 0%, #101317 55%, #0C0E12 100%);
+}
+
+/* ---- 37.7 樱花 sakura（浅色 = 樱花粉；深色 = 夜樱，轻盈治愈） ---- */
+body[data-accent="sakura"] {
+  --primary:        #C95B84;
+  --primary-dark:   #B84E75;
+  --primary-deep:   #A64467;
+  --primary-light:  #FBE9F0;
+  --primary-border: #F0C7D7;
+  --primary-glow:   rgba(201, 91, 132, 0.14);
+  --primary-bright: #DE7CA0;
+  --primary-rgb:    201, 91, 132;
+  --title-color:    #3C2630;
+  --bg-page: linear-gradient(180deg, #FBE6EF 0%, #FDF2F7 45%, #FFFEFF 100%);
+}
+body[data-accent="sakura"][data-mode="dark"] {
+  --primary:        #E77CA6;
+  --primary-dark:   #EE93B6;
+  --primary-deep:   #F3AAC7;
+  --primary-light:  #341D27;
+  --primary-border: #593144;
+  --primary-glow:   rgba(231, 124, 166, 0.20);
+  --primary-bright: #EE93B6;
+  --primary-rgb:    231, 124, 166;
+  --title-color:    #F3DAE4;
+
+  --line:     #372631;
+  --bg-input: #261A20;
+  --focus-bg: #2E2028;
+  --placeholder: #816370;
+  --empty-text: #A88B97;
+  --divider-soft: #392833;
+
+  --surface:      #211820;
+  --surface-2:    #2A1F28;
+  --surface-soft: #251C23;
+  --track:        #2B2029;
+  --card-border:  #372631;
+  --tabbar-bg:    rgba(37, 26, 33, 0.48);
+  --tabbar-line:  rgba(255, 255, 255, 0.13);
+
+  --bg-page: linear-gradient(180deg, #1D141A 0%, #170F15 55%, #120C10 100%);
+}
+
 /* ----------------------------------------------------------------------
    38. 外观设置：风格色板选择器（管理页「外观」卡片）
+       每套色板是一张「迷你手机屏」预览卡：卡面底色 = 该色板的页面背景、
+       小卡片 = 该色板的卡片表面、圆点与胶囊 = 该色板主色；跟随当前明暗
+       自动切换浅/深预览（见本节末尾的 --pv-* 预览色表）。
    ---------------------------------------------------------------------- */
 .accent-block { margin-top: 14px; }
 
@@ -2468,25 +2701,171 @@ body[data-accent="ink"][data-mode="dark"] {
   color: var(--primary-deep);
   font-weight: 600;
 }
+.accent-desc {
+  margin-left: 6px;
+  color: var(--text-faint);
+}
 
-.accent-row {
+.accent-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px 8px;
+}
+
+.accent-card {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: 6px;
+  padding: 0;
+  border-radius: 12px;
+}
+.accent-card:active .accent-preview { transform: scale(0.95); }
+
+/* 迷你手机屏：3:4 圆角小屏 */
+.accent-preview {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: 11px;
+  background: var(--pv-bg);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55),
+              0 2px 8px rgba(var(--primary-rgb), 0.10);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+body[data-mode="dark"] .accent-preview {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09),
+              0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
-.accent-dot {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: var(--dot);
-  border: 2px solid transparent;
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85);
-  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+/* 屏幕里的缩微界面：一张小卡片（内含主题色圆点 + 灰线）+ 底部主题色胶囊 */
+.pv-card {
+  position: absolute;
+  left: 11%; right: 11%; top: 10%;
+  height: 42%;
+  border-radius: 5px;
+  background: var(--pv-card);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10);
 }
-.accent-dot:active { transform: scale(0.92); }
-.accent-dot.active {
-  border-color: var(--primary);
-  transform: scale(1.06);
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 0 3px var(--primary-glow);
+.pv-dot {
+  position: absolute;
+  left: 18%; top: 15%;
+  width: 16%; aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--pv-accent);
+}
+.pv-line {
+  position: absolute;
+  left: 18%; top: 41%;
+  width: 48%; height: 3px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.13);
+}
+body[data-mode="dark"] .pv-line { background: rgba(255, 255, 255, 0.18); }
+.pv-pill {
+  position: absolute;
+  left: 11%; bottom: 10%;
+  width: 52%; height: 13%;
+  border-radius: 999px;
+  background: var(--pv-accent);
+  opacity: 0.92;
+}
+
+.accent-name {
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-sub);
+  letter-spacing: 0.5px;
+  transition: color 0.15s;
+}
+
+/* 选中态：主题色描边 + 右上角对勾（描边色 = 当前主题主色，跟着整套换色一起变） */
+.accent-card.active .accent-preview {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55),
+              0 0 0 2px var(--primary),
+              0 4px 12px rgba(var(--primary-rgb), 0.24);
+}
+.accent-card.active .accent-preview::after {
+  content: "✓";
+  position: absolute;
+  top: -6px; right: -6px;
+  width: 17px; height: 17px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: 10px;
+  line-height: 17px;
+  text-align: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+.accent-card.active .accent-name {
+  color: var(--primary-deep);
+  font-weight: 600;
+}
+
+/* ---- 预览色表：与第 37 节各色板一一对应（浅色版在前，深色版跟随 data-mode） ---- */
+.accent-card[data-accent="mint"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #DFF4E9 0%, #FDFEFD 100%);
+  --pv-card: #FFFFFF; --pv-accent: #00B578;
+}
+body[data-mode="dark"] .accent-card[data-accent="mint"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #14201B 0%, #0F1512 100%);
+  --pv-card: #1C2622; --pv-accent: #00B578;
+}
+.accent-card[data-accent="ocean"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #E1ECFE 0%, #FDFEFF 100%);
+  --pv-card: #FFFFFF; --pv-accent: #2E7CF6;
+}
+body[data-mode="dark"] .accent-card[data-accent="ocean"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #131C2B 0%, #0D121C 100%);
+  --pv-card: #161D2A; --pv-accent: #4D96FF;
+}
+.accent-card[data-accent="sunset"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #FDE9DC 0%, #FFFEFD 100%);
+  --pv-card: #FFFFFF; --pv-accent: #F2622F;
+}
+body[data-mode="dark"] .accent-card[data-accent="sunset"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #201510 0%, #140C09 100%);
+  --pv-card: #1D1611; --pv-accent: #FF8A5C;
+}
+.accent-card[data-accent="dusk"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #E9E3FD 0%, #FEFDFF 100%);
+  --pv-card: #FFFFFF; --pv-accent: #8B6CF0;
+}
+body[data-mode="dark"] .accent-card[data-accent="dusk"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #161126 0%, #0E0B18 100%);
+  --pv-card: #171226; --pv-accent: #A78BFA;
+}
+.accent-card[data-accent="ink"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #F3EDDC 0%, #FEFDF8 100%);
+  --pv-card: #FFFFFF; --pv-accent: #9C7A2E;
+}
+body[data-mode="dark"] .accent-card[data-accent="ink"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #101014 0%, #0A0B0E 100%);
+  --pv-card: #17181D; --pv-accent: #D9A441;
+}
+.accent-card[data-accent="celadon"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #DCEFEB 0%, #FBFEFD 100%);
+  --pv-card: #FFFFFF; --pv-accent: #3D8C7F;
+}
+body[data-mode="dark"] .accent-card[data-accent="celadon"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #12201C 0%, #0B1311 100%);
+  --pv-card: #152320; --pv-accent: #5FB3A4;
+}
+.accent-card[data-accent="graphite"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #E6E9EE 0%, #FDFDFE 100%);
+  --pv-card: #FFFFFF; --pv-accent: #4B5563;
+}
+body[data-mode="dark"] .accent-card[data-accent="graphite"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #14171C 0%, #0C0E12 100%);
+  --pv-card: #16191F; --pv-accent: #A8B3C4;
+}
+.accent-card[data-accent="sakura"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #FBE6EF 0%, #FFFEFF 100%);
+  --pv-card: #FFFFFF; --pv-accent: #C95B84;
+}
+body[data-mode="dark"] .accent-card[data-accent="sakura"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #1D141A 0%, #120C10 100%);
+  --pv-card: #211820; --pv-accent: #E77CA6;
 }
