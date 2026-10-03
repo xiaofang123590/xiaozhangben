@@ -304,12 +304,14 @@ var Store = (function () {
   // ==================== 数据规范（读取/保存时的容错清洗） ====================
 
   /**
-   * 规范预算对象：monthly 只可能是正数（两位小数）或 null
+   * 规范预算对象：
+   *   monthly    —— 只可能是正数（两位小数）或 null
+   *   byCategory —— 分类 id → 正数（两位小数），非法条目丢弃
    * @param {*} b
-   * @returns {{monthly: (number|null)}}
+   * @returns {{monthly: (number|null), byCategory: Object}}
    */
   function normalizeBudgets(b) {
-    var out = { monthly: null };
+    var out = { monthly: null, byCategory: {} };
     if (b && typeof b === 'object' && !Array.isArray(b)) {
       if (b.monthly === null) {
         out.monthly = null;
@@ -319,6 +321,13 @@ var Store = (function () {
           out.monthly = round2(n);
         }
         // 非法预算容错：视为未设置
+      }
+      var by = b.byCategory;
+      if (by && typeof by === 'object' && !Array.isArray(by)) {
+        Object.keys(by).forEach(function (k) {
+          var v = Number(by[k]);
+          if (k && isFinite(v) && v > 0) out.byCategory[k] = round2(v);
+        });
       }
     }
     return out;
@@ -644,7 +653,7 @@ var Store = (function () {
    *            lastBackupAt:(number|null)}}
    */
   function sanitizeData(parsed) {
-    var out = { records: [], categories: [], budgets: { monthly: null },
+    var out = { records: [], categories: [], budgets: { monthly: null, byCategory: {} },
       diet: { profile: null, entries: [], customFoods: [] }, lastBackupAt: null };
     if (!parsed || typeof parsed !== 'object') {
       return out;
@@ -710,6 +719,12 @@ var Store = (function () {
 
     // ---- 预算 ----
     out.budgets = normalizeBudgets(parsed.budgets);
+    // 分类预算按现有分类对账：分类已被删除的孤儿预算一并清掉
+    var budgetCatIds = {};
+    out.categories.forEach(function (c) { budgetCatIds[c.id] = true; });
+    Object.keys(out.budgets.byCategory).forEach(function (k) {
+      if (!budgetCatIds[k]) delete out.budgets.byCategory[k];
+    });
 
     // ---- 饮食（旧数据无 diet 字段时得到空默认值） ----
     out.diet = sanitizeDiet(parsed.diet);
@@ -730,7 +745,7 @@ var Store = (function () {
     return {
       records: [],
       categories: DEFAULT_CATEGORIES.concat(DEFAULT_INCOME_CATEGORIES).map(copyObj),
-      budgets: { monthly: null },
+      budgets: { monthly: null, byCategory: {} },
       diet: { profile: null, entries: [], customFoods: [], favorites: [], combos: [] },
       lastBackupAt: null
     };
@@ -1229,6 +1244,10 @@ var Store = (function () {
     data.categories = data.categories.filter(function (c) {
       return c.id !== id;
     });
+    // 分类没了，它的预算也一并清掉（不留下看不见的孤儿预算）
+    if (data.budgets.byCategory && data.budgets.byCategory[id] != null) {
+      delete data.budgets.byCategory[id];
+    }
     persist();
     return true;
   }
@@ -1263,6 +1282,73 @@ var Store = (function () {
     data.budgets.monthly = round2(n);
     persist();
     return data.budgets.monthly;
+  }
+
+  /**
+   * 分类预算表（分类 id → 月上限），返回副本
+   * @returns {Object<string, number>}
+   */
+  function getCategoryBudgets() {
+    return copyObj(getData().budgets.byCategory || {});
+  }
+
+  /**
+   * 设置 / 清除某个分类的每月预算
+   * @param {string} categoryId
+   * @param {number|string|null} amount null 或空字符串表示清除
+   * @returns {Object<string, number>} 设置后的分类预算表（副本）
+   * @throws {Error} '预算不合法'
+   */
+  function setCategoryBudget(categoryId, amount) {
+    // 注意：此处不用 normalizeCategoryId（它会把非法值回落到 'qita'），
+    // 分类 id 必须原样命中现有分类，否则视为非法
+    var id = (typeof categoryId === 'string') ? categoryId.trim() : '';
+    var exists = id && getData().categories.some(function (c) { return c.id === id; });
+    if (!exists) throw new Error('预算不合法');
+    var data = getData();
+    if (!data.budgets.byCategory) data.budgets.byCategory = {};
+    if (amount === null || amount === '') {
+      delete data.budgets.byCategory[id];
+      persist();
+      return copyObj(data.budgets.byCategory);
+    }
+    var n = Number(amount);
+    if (!isFinite(n) || n <= 0) throw new Error('预算不合法');
+    data.budgets.byCategory[id] = round2(n);
+    persist();
+    return copyObj(data.budgets.byCategory);
+  }
+
+  /**
+   * 分类预算执行情况（仅当月有数据时统计，只算支出）：
+   * 每个设了预算的分类一条，超支的排前面，其余按使用比例降序
+   * @param {string} ym 形如 '2026-10'
+   * @returns {Array<{categoryId,name,icon,color,budget,spent,remaining,usedPct,level}>}
+   *          level: 'ok' | 'warn'(≥80%) | 'over'
+   */
+  function getCategoryBudgetStatus(ym) {
+    var map = getData().budgets.byCategory || {};
+    var spentByCat = {};
+    getMonthRecords(ym, 'expense').forEach(function (r) {
+      spentByCat[r.categoryId] = (spentByCat[r.categoryId] || 0) + r.amount;
+    });
+    var out = [];
+    getData().categories.forEach(function (c) {
+      if (c.kind !== 'expense') return;
+      var b = map[c.id];
+      if (!isFinite(b) || b <= 0) return;
+      var spent = round2(spentByCat[c.id] || 0);
+      var ratio = spent / b;
+      out.push({
+        categoryId: c.id, name: c.name, icon: c.icon, color: c.color,
+        budget: b, spent: spent,
+        remaining: round2(b - spent),
+        usedPct: Math.round(ratio * 100),
+        level: spent >= b ? 'over' : (ratio >= 0.8 ? 'warn' : 'ok')
+      });
+    });
+    out.sort(function (a, b2) { return b2.usedPct - a.usedPct; });
+    return out;
   }
 
   // ==================== 对外 API：饮食（diet） ====================
@@ -1977,6 +2063,9 @@ var Store = (function () {
     // 预算
     getBudget: getBudget,
     setBudget: setBudget,
+    getCategoryBudgets: getCategoryBudgets,
+    setCategoryBudget: setCategoryBudget,
+    getCategoryBudgetStatus: getCategoryBudgetStatus,
     // 饮食（diet）
     getDiet: getDiet,
     addDietEntry: addDietEntry,

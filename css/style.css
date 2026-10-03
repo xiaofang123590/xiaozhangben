@@ -877,6 +877,86 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   font-variant-numeric: tabular-nums;
 }
 
+/* ---- 分类预算列表（预算页「分类预算」卡，JS 动态生成 .cbud-row） ---- */
+#catbudget-list { display: flex; flex-direction: column; }
+/* 弹窗里的分类选择九宫格：比页面里的更紧凑 */
+#catbudget-categories { margin: 2px 0; gap: 7px; }
+
+.cbud-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 11px 4px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+.cbud-row + .cbud-row {
+  border-top: 1px solid transparent;
+  border-image: linear-gradient(90deg, rgba(var(--primary-rgb), 0) 0%, var(--divider-soft) 16%, var(--divider-soft) 84%, rgba(var(--primary-rgb), 0) 100%) 1;
+}
+.cbud-row:active { background: var(--surface-soft); }
+
+.cbud-icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  background: linear-gradient(180deg, var(--focus-bg), var(--surface-2));
+  border-radius: 11px;
+}
+
+.cbud-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cbud-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.cbud-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-main);
+}
+.cbud-amount {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--text-sub);
+  font-variant-numeric: tabular-nums;
+}
+
+.cbud-track {
+  height: 8px;
+  background: var(--track);
+  border-radius: 999px;
+  overflow: hidden;
+}
+/* 进度：默认主题色渐变；.warn 橙色预警；.over 红色超支 */
+.cbud-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--primary-bright), var(--primary));
+  transition: width 0.4s ease, background 0.3s ease;
+}
+.cbud-bar.warn { background: linear-gradient(90deg, #FFB74D, #FF9800); }
+.cbud-bar.over { background: linear-gradient(90deg, #FF7A70, var(--danger)); }
+
+.cbud-note {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ----------------------------------------------------------------------
    11. 管理页：分类管理列表
    ---------------------------------------------------------------------- */

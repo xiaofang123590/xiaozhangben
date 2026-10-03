@@ -599,6 +599,97 @@ function renderBudget() {
     }
     listEl.innerHTML = html;
   }
+
+  renderCategoryBudgets();
+}
+
+/* ---------- 分类预算（预算页「分类预算」卡 + 设置弹窗） ---------- */
+
+var editingCatBudgetId = null;   // 弹窗里当前选中的分类 id
+
+/** 渲染分类预算列表：图标 + 名称 + 已用/上限 + 进度条 + 剩余/超支说明 */
+function renderCategoryBudgets() {
+  var items = Store.getCategoryBudgetStatus(currentYm);
+  $('catbudget-empty').classList.toggle('hidden', items.length > 0);
+  var html = '';
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i];
+    var levelCls = it.level === 'warn' ? ' warn' : (it.level === 'over' ? ' over' : '');
+    var note = it.level === 'over'
+      ? '<span class="over-text">已超支 ¥' + f(it.spent - it.budget) + '</span>'
+      : '剩余 ¥' + f(it.remaining) + '（已用 ' + it.usedPct + '%）' +
+        (it.level === 'warn' ? ' · ⚠️ 快到上限了' : '');
+    html += '<div class="cbud-row" data-id="' + esc(it.categoryId) + '">' +
+      '<span class="cbud-icon">' + esc(it.icon) + '</span>' +
+      '<div class="cbud-main">' +
+        '<div class="cbud-head"><span class="cbud-name">' + esc(it.name) + '</span>' +
+        '<span class="cbud-amount">¥' + f(it.spent) + ' / ¥' + f(it.budget) + '</span></div>' +
+        '<div class="cbud-track"><div class="cbud-bar' + levelCls + '" style="width:' +
+          Math.min(it.usedPct, 100) + '%"></div></div>' +
+        '<div class="cbud-note">' + note + '</div>' +
+      '</div></div>';
+  }
+  $('catbudget-list').innerHTML = html;
+}
+
+/** 弹窗内的分类选择九宫格（只列支出分类） */
+function renderCatBudgetPicker(cats, selectedId) {
+  var html = '';
+  for (var i = 0; i < cats.length; i++) {
+    html += '<button type="button" class="cat-item' + (cats[i].id === selectedId ? ' selected' : '') +
+      '" data-id="' + esc(cats[i].id) + '"><span class="cat-icon">' + esc(cats[i].icon) +
+      '</span><span class="cat-name">' + esc(cats[i].name) + '</span></button>';
+  }
+  $('catbudget-categories').innerHTML = html;
+}
+
+/** 打开分类预算弹窗；catId 为空时默认选中第一个尚未设预算的分类（都没有则第一个） */
+function openCatBudgetModal(catId) {
+  var cats = Store.getCategories('expense');
+  if (!cats.length) { toast('请先在管理页添加支出分类'); return; }
+  var map = Store.getCategoryBudgets();
+  if (!catId || !cats.some(function (c) { return c.id === catId; })) {
+    catId = null;
+    for (var i = 0; i < cats.length; i++) {
+      if (map[cats[i].id] == null) { catId = cats[i].id; break; }
+    }
+    if (!catId) catId = cats[0].id;
+  }
+  editingCatBudgetId = catId;
+  renderCatBudgetPicker(cats, catId);
+  $('catbudget-input').value = map[catId] != null ? String(map[catId]) : '';
+  $('catbudget-clear-btn').classList.toggle('hidden', map[catId] == null);
+  $('modal-catbudget').classList.remove('hidden');
+}
+
+/** 弹窗里切换分类：同步预填该分类已有的预算 */
+function pickCatBudgetCategory(catId) {
+  var cats = Store.getCategories('expense');
+  if (!cats.some(function (c) { return c.id === catId; })) return;
+  editingCatBudgetId = catId;
+  renderCatBudgetPicker(cats, catId);
+  var map = Store.getCategoryBudgets();
+  $('catbudget-input').value = map[catId] != null ? String(map[catId]) : '';
+  $('catbudget-clear-btn').classList.toggle('hidden', map[catId] == null);
+}
+
+/** 保存弹窗中的分类预算；金额留空视为清除 */
+function catBudgetSave() {
+  if (!editingCatBudgetId) return;
+  var raw = $('catbudget-input').value.trim();
+  try {
+    if (raw === '') {
+      Store.setCategoryBudget(editingCatBudgetId, null);
+      toast('已清除该分类预算');
+    } else {
+      var v = parseFloat(raw);
+      if (!isFinite(v) || v <= 0) { toast('请输入正确的预算金额'); return; }
+      Store.setCategoryBudget(editingCatBudgetId, v);
+      toast('分类预算已保存 ✓');
+    }
+  } catch (e) { toast(e.message); return; }
+  $('modal-catbudget').classList.add('hidden');
+  renderCategoryBudgets();
 }
 
 function budgetSave() {
@@ -987,6 +1078,29 @@ function bindEvents() {
   $('budget-save-btn').addEventListener('click', budgetSave);
   $('budget-input').addEventListener('keydown', function (e) { if (e.key === 'Enter') budgetSave(); });
 
+  // 分类预算：列表点行编辑 / 「+ 设置分类预算」新增
+  $('add-catbudget-btn').addEventListener('click', function () { openCatBudgetModal(null); });
+  $('catbudget-list').addEventListener('click', function (e) {
+    var row = e.target.closest('.cbud-row');
+    if (row) openCatBudgetModal(row.getAttribute('data-id'));
+  });
+  $('catbudget-categories').addEventListener('click', function (e) {
+    var btn = e.target.closest('.cat-item');
+    if (btn) pickCatBudgetCategory(btn.getAttribute('data-id'));
+  });
+  $('catbudget-save-btn').addEventListener('click', catBudgetSave);
+  $('catbudget-input').addEventListener('keydown', function (e) { if (e.key === 'Enter') catBudgetSave(); });
+  $('catbudget-clear-btn').addEventListener('click', function () {
+    if (!editingCatBudgetId) return;
+    try { Store.setCategoryBudget(editingCatBudgetId, null); } catch (err) { toast(err.message); return; }
+    $('modal-catbudget').classList.add('hidden');
+    toast('已清除该分类预算');
+    renderCategoryBudgets();
+  });
+  $('catbudget-cancel-btn').addEventListener('click', function () {
+    $('modal-catbudget').classList.add('hidden');
+  });
+
   // 主题：明暗
   $('theme-toggle').addEventListener('click', function (e) {
     var btn = e.target.closest('.type-btn');
@@ -1226,6 +1340,57 @@ function registerServiceWorker() {
 
 /* ================= 启动入口 ================= */
 
+/**
+ * 处理启动参数（PWA 快捷方式 / 分享目标，只在登录后执行）：
+ *   ?action=add    桌面长按「记一笔」→ 记账页并聚焦金额输入
+ *   ?action=meal   桌面长按「记一餐」→ 饮食页并聚焦智能记餐输入
+ *   ?view=stats    桌面长按「看统计」→ 直达统计页
+ *   ?text=...      从微信/支付宝等「分享」进来的文本 → 自动跑智能记账解析
+ * 参数处理完即用 replaceState 抹掉，刷新或切换账户不会重复触发。
+ */
+function handleLaunchParams() {
+  var q = null;
+  try { q = new URLSearchParams(location.search); } catch (e) { return; }  // 老内核静默跳过
+  if (!q) return;
+
+  var action = q.get('action') || '';
+  var view = q.get('view') || '';
+  var shared = q.get('text') || q.get('title') || '';
+  if (!action && !view && !shared) return;
+
+  function clearQuery() {
+    try { history.replaceState(null, '', location.pathname); } catch (e) { /* 忽略 */ }
+  }
+
+  if (shared) {
+    // 分享文本：塞进智能记账，解析成功即回填表单，用户确认后点「记一笔」
+    switchView('record');
+    clearQuery();
+    $('smart-input').value = shared.slice(0, 60);
+    smartParse();
+    return;
+  }
+  if (action === 'add') {
+    switchView('record');
+    clearQuery();
+    $('quick-amount').focus();
+    return;
+  }
+  if (action === 'meal') {
+    switchView('diet');
+    clearQuery();
+    var mealInput = $('diet-nlp-input');
+    if (mealInput) mealInput.focus();
+    return;
+  }
+  if (['record', 'stats', 'budget', 'diet', 'manage'].indexOf(view) >= 0) {
+    switchView(view);
+    clearQuery();
+  } else {
+    clearQuery();   // 未知参数同样清掉，保持地址栏干净
+  }
+}
+
 /** 登录成功后：绑定该账户的数据空间并初始化各视图 */
 function startApp(username) {
   Store.setUser(username);
@@ -1253,6 +1418,7 @@ function startApp(username) {
   switchView('record');
   refreshBanner();
   checkReminders();
+  handleLaunchParams();                 // 快捷方式 / 分享进来的启动参数
 }
 
 function boot() {

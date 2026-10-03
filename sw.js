@@ -6,7 +6,7 @@
  *       在线打开永远是最新版，离线照常可用，从根上避免「发版后手机读到旧代码」。
  * 注意：CACHE_VERSION 仅用于旧缓存清理；更新内容后习惯性 +1 即可，不再影响新旧。
  */
-var CACHE_VERSION = 'xzb-v14';
+var CACHE_VERSION = 'xzb-v16';
 
 var PRECACHE = [
   './',
@@ -27,7 +27,10 @@ var PRECACHE = [
   './js/app.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './icons/apple-touch-icon.png'
+  './icons/apple-touch-icon.png',
+  './icons/shortcut-add.png',
+  './icons/shortcut-meal.png',
+  './icons/shortcut-stats.png'
 ];
 
 self.addEventListener('install', function (event) {

@@ -92,7 +92,7 @@
       <div class="card" id="smart-card">
         <h3 class="card-title">智能记账</h3>
         <div class="smart-row">
-          <input id="smart-input" type="text" maxlength="40" placeholder="粘贴一句话，如：昨天打车23块" autocomplete="off">
+          <input id="smart-input" type="text" maxlength="60" placeholder="粘贴一句话，如：昨天打车23块" autocomplete="off">
           <button id="smart-parse-btn" class="btn-secondary btn-sm">解析</button>
         </div>
         <p class="hint">自动识别时间、分类和金额，按回车也能解析；识别结果会填进上方表单，确认无误再点「记一笔」。</p>
@@ -187,6 +187,14 @@
           <div id="budget-stats"></div>
         </div>
         <p class="hint">提示：已用达 80% 时黄色提醒，超支时红色警示（打开页面时显示）。预算只统计支出。</p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h3 class="card-title">分类预算</h3>
+          <button id="add-catbudget-btn" class="btn-secondary btn-sm">+ 设置分类预算</button>
+        </div>
+        <div id="catbudget-list"></div>
+        <div id="catbudget-empty" class="empty-tip hidden">给容易超支的分类设个上限，比如餐饮、购物；点卡片可修改。</div>
       </div>
       <div class="card">
         <h3 class="card-title">本月支出构成</h3>
@@ -376,6 +384,33 @@
       <span class="modal-actions-right">
         <button id="category-cancel-btn" class="btn-secondary">取消</button>
         <button id="category-save-btn" class="btn-primary">保存</button>
+      </span>
+    </div>
+  </div>
+</div>
+
+<!-- 分类预算设置弹窗 -->
+<div id="modal-catbudget" class="modal hidden">
+  <div class="modal-mask" data-close="1"></div>
+  <div class="modal-body">
+    <h3 class="modal-title">设置分类预算</h3>
+    <div class="form-row">
+      <label class="form-label">分类</label>
+      <div id="catbudget-categories" class="category-grid"></div>
+    </div>
+    <div class="form-row">
+      <label class="form-label">每月上限</label>
+      <div class="budget-input-row">
+        <span class="currency">¥</span>
+        <input id="catbudget-input" type="number" inputmode="decimal" min="0" step="0.01" placeholder="如 1500" autocomplete="off">
+      </div>
+    </div>
+    <p class="hint">只对支出分类生效，与「本月预算」互相独立；留空保存即清除该分类的预算。</p>
+    <div class="modal-actions">
+      <button id="catbudget-clear-btn" class="btn-danger hidden">清除</button>
+      <span class="modal-actions-right">
+        <button id="catbudget-cancel-btn" class="btn-secondary">取消</button>
+        <button id="catbudget-save-btn" class="btn-primary">保存</button>
       </span>
     </div>
   </div>
