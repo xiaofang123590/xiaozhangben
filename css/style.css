@@ -265,7 +265,7 @@ input:focus-visible {
 
 /* 浅色描边 */
 .btn-secondary {
-  background: #FFFFFF;
+  background: var(--surface);
   border-color: var(--primary-border);
   color: var(--primary-deep);
 }
@@ -725,7 +725,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   gap: 10px;
   padding: 9px 0;
 }
-.bcat-row + .bcat-row { border-top: 1px solid #F6F8F6; }
+.bcat-row + .bcat-row { border-top: 1px solid var(--line); }
 
 .bcat-icon {
   width: 26px;
@@ -773,7 +773,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   gap: 12px;
   padding: 10px 2px;
 }
-.mcat-row + .mcat-row { border-top: 1px solid #F5F7F5; }
+.mcat-row + .mcat-row { border-top: 1px solid var(--line); }
 
 .mcat-icon {
   width: 34px;
@@ -846,12 +846,12 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   letter-spacing: 1px;
 }
 
-/* 激活态：主色高亮 */
+/* 激活态：主色高亮 + 图标弹性放大（tabPop 见第 15 节） */
 .tab.active { color: var(--primary-deep); }
 .tab.active .tab-icon {
   filter: none;
   opacity: 1;
-  transform: translateY(-1px);
+  animation: tabPop 0.32s ease;
 }
 .tab.active .tab-label {
   color: var(--primary-deep);
@@ -887,7 +887,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   max-width: 480px;
   max-height: 86vh;
   overflow-y: auto;
-  background: #FFFFFF;
+  background: var(--surface);
   border-radius: 20px 20px 0 0;
   padding: 22px 20px calc(24px + env(safe-area-inset-bottom, 0px));
   box-shadow: var(--shadow-modal);
@@ -1055,7 +1055,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .auth-card {
   width: 100%;
   max-width: 360px;
-  background: #fff;
+  background: var(--surface);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-float);
   padding: 30px 22px 22px;
@@ -1198,29 +1198,19 @@ body.standalone-ios #app-header {
 }
 
 /* ======================================================================
-   （以下为追加内容）29 ~ 32 节：新组件样式 + 深色模式
-   - 深色模式通过 body[data-theme="dark"] 覆盖 :root 变量实现（第 30 节）；
-     系统深色时对 body[data-theme="auto"] 做完全相同的覆盖（第 32 节）。
-   - 浅色模式视觉与追加前完全一致：第 29 节新增变量的默认值即原视觉。
+   （以下为追加内容）30 ~ 37 节：主题引擎 + 新组件样式
+   - 深色模式只有一份实现：body[data-mode="dark"] 覆盖变量（第 30 节），
+     data-theme="auto" 由 JS 解析系统深色后写入实际 data-mode，
+     旧版 @media 副本（原第 32 / 34.12 节）已删除。
+   - 风格色板见第 37 节 body[data-accent]，只覆盖品牌色与背景/表面色调。
    ====================================================================== */
 
 /* ----------------------------------------------------------------------
-   29. 补充设计变量：表面 / 轨道（浅色默认值）
-   原规则中写死的白色卡片、图标底、轨道等浅色收敛为变量，
-   供新组件直接引用，并便于深色模式统一替换（深色值见第 30 节）。
+   30. 深色模式 · 单份实现（JS 把 auto 解析成 light/dark 写到 data-mode）
+   只覆盖设计变量 + 少数组件微调；写死浅色的基础规则已全部 token 化。
    ---------------------------------------------------------------------- */
-:root {
-  --surface:      #FFFFFF;   /* 主表面：卡片 / 弹窗面板 / 登录卡等 */
-  --surface-2:    #F4F7F4;   /* 次级表面：流水 / 分类图标底 */
-  --surface-soft: #F5F9F6;   /* 行级 hover / active 底色 */
-  --track:        #EDF1ED;   /* 进度条 / 对比条浅灰轨道 */
-}
-
-/* ----------------------------------------------------------------------
-   30. 深色模式 · data-theme="dark"（针对既有样式中写死浅色的规则逐一覆盖）
-   ---------------------------------------------------------------------- */
-body[data-theme="dark"] {
-  /* 主题绿保持 #00B578 不变；hover / 文字档提亮一档以适配深底 */
+body[data-mode="dark"] {
+  /* 主题绿提亮一档以适配深底（其他风格的深色值见第 37 节） */
   --primary-dark:   #00C985;
   --primary-deep:   #2BD48F;
   --primary-light:  #16362B;               /* 选中态深绿底 */
@@ -1231,9 +1221,23 @@ body[data-theme="dark"] {
   --text-sub:   #9DB0A7;                   /* 次文字 */
   --text-grey:  #8A9C93;
   --text-faint: #6E7F77;                   /* 更弱 */
+  --title-color: #D8E8DF;
 
   --line:     #2A352F;                     /* 分割线 */
   --bg-input: #232E29;                     /* 输入框底 */
+  --focus-bg: #2A3630;                     /* 输入 focus 微亮底 */
+  --placeholder: #64756D;
+  --empty-text: #8FA096;
+  --divider-soft: #2C3833;
+
+  /* 表面 / 轨道 */
+  --surface:      #1C2622;                 /* 卡片表面 */
+  --surface-2:    #26322C;
+  --surface-soft: #232E29;
+  --track:        #26312B;
+  --card-border:  #2A352F;
+  --tabbar-bg:    rgba(28, 38, 34, 0.92);
+  --tabbar-line:  #26312B;
 
   /* 预算预警 / 超支：深色底 + 亮色字 */
   --warn-bg:   rgba(255, 184, 77, 0.14);
@@ -1243,109 +1247,25 @@ body[data-theme="dark"] {
   --over-text: #FF8177;
   --over-line: rgba(250, 81, 81, 0.35);
 
-  /* 表面 / 轨道（第 29 节变量的深色值） */
-  --surface:      #1C2622;                 /* 卡片表面 */
-  --surface-2:    #26322C;
-  --surface-soft: #232E29;
-  --track:        #26312B;
-
   /* 阴影加重 */
   --shadow-card:  0 2px 12px rgba(0, 0, 0, 0.4);
   --shadow-float: 0 10px 28px rgba(0, 0, 0, 0.55);
+  --shadow-modal: 0 -8px 30px rgba(0, 0, 0, 0.5);
+  --shadow-tabbar: 0 -4px 16px rgba(0, 0, 0, 0.45);
+  --mask-bg:      rgba(6, 10, 8, 0.66);
 
   color-scheme: dark;                      /* 日期选择器 / 下拉等原生控件跟随深色 */
 
-  /* 页面背景：深色渐变（覆盖原浅色渐变） */
-  background: linear-gradient(180deg, #14201B 0%, #101814 55%, #0F1512 100%) fixed;
+  /* 页面背景：深色渐变 */
+  --bg-page: linear-gradient(180deg, #14201B 0%, #101814 55%, #0F1512 100%);
 }
 
 /* 根元素 color-scheme：视口滚动条等跟随深色 */
-html:has(body[data-theme="dark"]) { color-scheme: dark; }
+html:has(body[data-mode="dark"]) { color-scheme: dark; }
 
-/* ---- 以下为写死浅色处的针对性覆盖 ---- */
-
-/* 页面标题（原 #223528 深绿） */
-body[data-theme="dark"] #page-title { color: #D8E8DF; }
-
-/* 主表面：卡片 / 日分组 / 弹窗面板 / 登录卡（原 #FFFFFF） */
-body[data-theme="dark"] :is(.card, .day-group, .modal-body, .auth-card) {
-  background: var(--surface);
-}
-
-/* 次级按钮（原白底；浅色描边/文字色随变量自动翻转） */
-body[data-theme="dark"] .btn-secondary { background: var(--surface); }
-body[data-theme="dark"] .btn-secondary:active { background: var(--primary-light); }
-body[data-theme="dark"] .btn-secondary:hover  { background: var(--primary-light); }
-
-/* 分类九宫格（原白底 + #EDF0ED 描边；选中态单独恢复绿色） */
-body[data-theme="dark"] .cat-item { background: var(--surface); border-color: #2A352F; }
-body[data-theme="dark"] .cat-item.selected {
-  background: var(--primary-light);
-  border-color: var(--primary);
-}
-
-/* 月份切换按钮（原白底 + #E2EAE4 描边 + #666 字） */
-body[data-theme="dark"] .month-btn {
-  background: var(--surface);
-  border-color: #39453E;
-  color: var(--text-sub);
-}
-body[data-theme="dark"] .month-btn:active,
-body[data-theme="dark"] .month-btn:hover {
-  background: var(--primary-light);
-  border-color: var(--primary-border);
-  color: var(--primary-deep);
-}
-
-/* 输入类 focus 白底 → 深色微亮底（原 #FFFFFF） */
-body[data-theme="dark"] input[type="text"]:focus,
-body[data-theme="dark"] input[type="date"]:focus,
-body[data-theme="dark"] input[type="number"]:focus,
-body[data-theme="dark"] .quick-amount-row:focus-within,
-body[data-theme="dark"] .budget-input-row:focus-within { background: #2A3630; }
-body[data-theme="dark"] .auth-card .form-row input:focus { background: #2A3630; }
-
-/* placeholder 调暗（原 #B9C3BC / #C2CBC5） */
-body[data-theme="dark"] input::placeholder { color: #64756D; }
-body[data-theme="dark"] #quick-amount::placeholder { color: #5C6E66; }
-
-/* 行级分割线（原 #F5F7F5 / #F6F8F6） */
-body[data-theme="dark"] .record-item + .record-item,
-body[data-theme="dark"] .bcat-row + .bcat-row,
-body[data-theme="dark"] .mcat-row + .mcat-row { border-top-color: var(--line); }
-
-/* 流水行 hover / active 底色（原 #F5F9F6） */
-body[data-theme="dark"] .record-item:active,
-body[data-theme="dark"] .record-item:hover { background: var(--surface-soft); }
-
-/* 流水 / 分类图标底（原 #F4F7F4） */
-body[data-theme="dark"] .record-icon,
-body[data-theme="dark"] .mcat-icon { background: var(--surface-2); }
-
-/* 进度条轨道（原 #EDF1ED）与支出构成轨道（原 #EEF1EE） */
-body[data-theme="dark"] .progress-track,
-body[data-theme="dark"] .bcat-bar-track { background: var(--track); }
-
-/* 透明小图标按钮 hover / active（原 #F1F5F1 / #F1F4F1） */
-body[data-theme="dark"] .btn-icon:hover,
-body[data-theme="dark"] .btn-icon:active { background: #26312C; }
-
-/* 底部 TabBar（原 rgba(255,255,255,.94) + #ECF0EC 描边） */
-body[data-theme="dark"] #tab-bar {
-  background: rgba(28, 38, 34, 0.92);
-  border-top-color: #26312B;
-  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.45);
-}
-
-/* 弹窗：面板阴影加重（原 rgba(0,0,0,.12)）、遮罩加深（原 rgba(17,24,20,.5)） */
-body[data-theme="dark"] .modal-body { box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.5); }
-body[data-theme="dark"] .modal-mask { background: rgba(6, 10, 8, 0.66); }
-
-/* 登录卡 tab 激活块（原白底） */
-body[data-theme="dark"] .auth-tab.active {
-  background: var(--surface);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
-}
+/* 深色下的少数组件微调（其余全部由上面的变量接管） */
+body[data-mode="dark"] .auth-tab.active { box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35); }
+body[data-mode="dark"] #quick-amount::placeholder { color: #5C6E66; }
 
 /* ----------------------------------------------------------------------
    31. 新组件样式（浅色 / 深色通用的部分一律引用变量）
@@ -1517,128 +1437,19 @@ body[data-theme="dark"] .auth-tab.active {
   border-color: #C7DBFB;
   color: #2563EB;
 }
-/* 深色版本 */
-body[data-theme="dark"] .banner-info {
+/* 深色版本（深色变量统一在第 30 节，此处仅信息蓝这一组件色） */
+body[data-mode="dark"] .banner-info {
   background: rgba(59, 130, 246, 0.16);
   border-color: rgba(125, 168, 251, 0.38);
   color: #8AB6FF;
 }
 
 /* ----------------------------------------------------------------------
-   32. 深色模式 · 跟随系统（prefers-color-scheme: dark + data-theme="auto"）
-   内容与第 30 节及 31.8 的深色覆盖完全一致，仅选择器前缀换成 body[data-theme="auto"]
+   32.（已删除）深色跟随系统副本
+   旧版把深色变量在 @media (prefers-color-scheme: dark) 里对
+   data-theme="auto" 再抄一份；现由 JS 监听系统深色变化并把解析结果
+   写入 body[data-mode]，深色样式只需第 30 节这一份。
    ---------------------------------------------------------------------- */
-@media (prefers-color-scheme: dark) {
-  body[data-theme="auto"] {
-    --primary-dark:   #00C985;
-    --primary-deep:   #2BD48F;
-    --primary-light:  #16362B;
-    --primary-border: #2C5F4B;
-    --primary-glow:   rgba(0, 181, 120, 0.25);
-
-    --text-main:  #E8ECEA;
-    --text-sub:   #9DB0A7;
-    --text-grey:  #8A9C93;
-    --text-faint: #6E7F77;
-
-    --line:     #2A352F;
-    --bg-input: #232E29;
-
-    --warn-bg:   rgba(255, 184, 77, 0.14);
-    --warn-text: #FFC53D;
-    --warn-line: rgba(255, 184, 77, 0.32);
-    --over-bg:   rgba(250, 81, 81, 0.15);
-    --over-text: #FF8177;
-    --over-line: rgba(250, 81, 81, 0.35);
-
-    --surface:      #1C2622;
-    --surface-2:    #26322C;
-    --surface-soft: #232E29;
-    --track:        #26312B;
-
-    --shadow-card:  0 2px 12px rgba(0, 0, 0, 0.4);
-    --shadow-float: 0 10px 28px rgba(0, 0, 0, 0.55);
-
-    color-scheme: dark;
-    background: linear-gradient(180deg, #14201B 0%, #101814 55%, #0F1512 100%) fixed;
-  }
-
-  html:has(body[data-theme="auto"]) { color-scheme: dark; }
-
-  body[data-theme="auto"] #page-title { color: #D8E8DF; }
-
-  body[data-theme="auto"] :is(.card, .day-group, .modal-body, .auth-card) {
-    background: var(--surface);
-  }
-
-  body[data-theme="auto"] .btn-secondary { background: var(--surface); }
-  body[data-theme="auto"] .btn-secondary:active { background: var(--primary-light); }
-  body[data-theme="auto"] .btn-secondary:hover  { background: var(--primary-light); }
-
-  body[data-theme="auto"] .cat-item { background: var(--surface); border-color: #2A352F; }
-  body[data-theme="auto"] .cat-item.selected {
-    background: var(--primary-light);
-    border-color: var(--primary);
-  }
-
-  body[data-theme="auto"] .month-btn {
-    background: var(--surface);
-    border-color: #39453E;
-    color: var(--text-sub);
-  }
-  body[data-theme="auto"] .month-btn:active,
-  body[data-theme="auto"] .month-btn:hover {
-    background: var(--primary-light);
-    border-color: var(--primary-border);
-    color: var(--primary-deep);
-  }
-
-  body[data-theme="auto"] input[type="text"]:focus,
-  body[data-theme="auto"] input[type="date"]:focus,
-  body[data-theme="auto"] input[type="number"]:focus,
-  body[data-theme="auto"] .quick-amount-row:focus-within,
-  body[data-theme="auto"] .budget-input-row:focus-within { background: #2A3630; }
-  body[data-theme="auto"] .auth-card .form-row input:focus { background: #2A3630; }
-
-  body[data-theme="auto"] input::placeholder { color: #64756D; }
-  body[data-theme="auto"] #quick-amount::placeholder { color: #5C6E66; }
-
-  body[data-theme="auto"] .record-item + .record-item,
-  body[data-theme="auto"] .bcat-row + .bcat-row,
-  body[data-theme="auto"] .mcat-row + .mcat-row { border-top-color: var(--line); }
-
-  body[data-theme="auto"] .record-item:active,
-  body[data-theme="auto"] .record-item:hover { background: var(--surface-soft); }
-
-  body[data-theme="auto"] .record-icon,
-  body[data-theme="auto"] .mcat-icon { background: var(--surface-2); }
-
-  body[data-theme="auto"] .progress-track,
-  body[data-theme="auto"] .bcat-bar-track { background: var(--track); }
-
-  body[data-theme="auto"] .btn-icon:hover,
-  body[data-theme="auto"] .btn-icon:active { background: #26312C; }
-
-  body[data-theme="auto"] #tab-bar {
-    background: rgba(28, 38, 34, 0.92);
-    border-top-color: #26312B;
-    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.45);
-  }
-
-  body[data-theme="auto"] .modal-body { box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.5); }
-  body[data-theme="auto"] .modal-mask { background: rgba(6, 10, 8, 0.66); }
-
-  body[data-theme="auto"] .auth-tab.active {
-    background: var(--surface);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
-  }
-
-  body[data-theme="auto"] .banner-info {
-    background: rgba(59, 130, 246, 0.16);
-    border-color: rgba(125, 168, 251, 0.38);
-    color: #8AB6FF;
-  }
-}
 
 /* ----------------------------------------------------------------------
    33. 分类管理分组标题（支出分类 / 收入分类）
@@ -1653,13 +1464,12 @@ body[data-theme="dark"] .banner-info {
    34. 全局视觉美化（第二轮增量）
    - 顶栏装饰 / 卡片入场 / 标题竖条 / Tab 指示 / 选中呼吸感
    - 本轮新增组件：quick-tools-row / shopping-card / items-form-row / items-badge
-   - 深色覆盖沿用第 30/32 节机制：34.11 对应 data-theme="dark"，
-     34.12 对应 @media + data-theme="auto"，两块内容保持一致
+   - 深色覆盖统一走第 30 节 data-mode 机制（34.11 仅剩组件级微调）。
    ====================================================================== */
 
 /* ---- 34.1 顶栏：#page-title 渐变短下划线 + 全局等宽数字 ---- */
 #page-title {
-  background-image: linear-gradient(90deg, var(--primary) 0%, rgba(0, 181, 120, 0.12) 100%);
+  background-image: linear-gradient(90deg, var(--primary) 0%, rgba(var(--primary-rgb), 0.12) 100%);
   background-repeat: no-repeat;
   background-size: 46px 4px;
   background-position: 2px 100%;
@@ -1704,19 +1514,26 @@ body[data-theme="dark"] .banner-info {
   animation: catBreath 2.4s ease-in-out infinite;
 }
 
-/* ---- 34.5 底部导航：active 顶部小胶囊指示（纯 CSS，不改 DOM） ---- */
-.tab { position: relative; }
-.tab.active::before {
+/* ---- 34.5 底部导航：滑动胶囊指示器（DOM 里的 .tab-indicator，JS 写入 --tab-index） ---- */
+.tab { position: relative; z-index: 1; }
+.tab-indicator {
+  position: absolute;
+  top: 5px;
+  bottom: calc(5px + env(safe-area-inset-bottom, 0px));
+  left: 6px;
+  width: calc((100% - 12px) / 5);          /* 与 5 个等宽页签对齐 */
+  transform: translateX(calc(var(--tab-index, 0) * 100%));
+  transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+  pointer-events: none;
+  z-index: 0;
+}
+.tab-indicator::before {
   content: "";
   position: absolute;
-  top: -1px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 20px;
-  height: 3px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--primary), var(--primary-bright));
-  box-shadow: 0 1px 4px rgba(0, 181, 120, 0.45);
+  inset: 3px 5px;
+  border-radius: 11px;
+  background: var(--primary-light);
+  box-shadow: inset 0 0 0 1px var(--primary-border);
 }
 
 /* ---- 34.6 快捷工具行：右对齐按钮行 ---- */
@@ -1745,10 +1562,10 @@ body[data-theme="dark"] .banner-info {
 }
 #shopping-text:focus {
   border-color: var(--primary);
-  background: #FFFFFF;
+  background: var(--focus-bg);
   box-shadow: 0 0 0 3px var(--primary-glow);
 }
-#shopping-text::placeholder { color: #B9C3BC; }
+#shopping-text::placeholder { color: var(--placeholder); }
 
 .import-actions {
   display: flex;
@@ -1830,66 +1647,20 @@ body[data-theme="dark"] .banner-info {
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 181, 120, 0.30);
+  background: rgba(var(--primary-rgb), 0.30);
   border-radius: 999px;
 }
-::-webkit-scrollbar-thumb:hover { background: rgba(0, 181, 120, 0.50); }
+::-webkit-scrollbar-thumb:hover { background: rgba(var(--primary-rgb), 0.50); }
 ::-webkit-scrollbar-corner { background: transparent; }
 /* Firefox 渐进增强 */
-html { scrollbar-width: thin; scrollbar-color: rgba(0, 181, 120, 0.35) transparent; }
+html { scrollbar-width: thin; scrollbar-color: rgba(var(--primary-rgb), 0.35) transparent; }
 
 /* ----------------------------------------------------------------------
-   34.11 深色模式 · data-theme="dark"（与第 30 节机制一致的新增覆盖）
+   34.11 深色模式 · data-mode="dark"（仅剩少量组件级微调，其余走变量）
    ---------------------------------------------------------------------- */
-/* 流水分割线：深色渐隐线 */
-body[data-theme="dark"] .record-item + .record-item {
-  border-image: linear-gradient(90deg, rgba(0, 181, 120, 0) 0%, #2C3833 16%, #2C3833 84%, rgba(0, 181, 120, 0) 100%) 1;
-}
-/* 图标底：深色微渐变 */
-body[data-theme="dark"] .record-icon,
-body[data-theme="dark"] .mcat-icon {
-  background: linear-gradient(180deg, #2A3630, #222C27);
-}
-/* 分类图标小底：深色下加大绿色透明度 */
-body[data-theme="dark"] .cat-icon {
-  background: linear-gradient(180deg, rgba(0, 181, 120, 0.18), rgba(0, 181, 120, 0.08));
-}
-/* 空状态：深色底 + 提亮文字 */
-body[data-theme="dark"] .empty-tip {
-  color: #8FA096;
-  background: linear-gradient(180deg, rgba(0, 181, 120, 0.09), rgba(0, 181, 120, 0.04));
-}
-/* 图表容器：深色淡绿内衬 */
-body[data-theme="dark"] .chart-box {
-  background: linear-gradient(180deg, rgba(0, 181, 120, 0.08), rgba(0, 181, 120, 0.03));
-}
-/* 购物清单 textarea：focus 深色底 / placeholder 调暗 */
-body[data-theme="dark"] #shopping-text:focus { background: #2A3630; }
-body[data-theme="dark"] #shopping-text::placeholder { color: #64756D; }
-
-/* ----------------------------------------------------------------------
-   34.12 深色模式 · 跟随系统（@media + data-theme="auto"，同 34.11）
-   ---------------------------------------------------------------------- */
-@media (prefers-color-scheme: dark) {
-  body[data-theme="auto"] .record-item + .record-item {
-    border-image: linear-gradient(90deg, rgba(0, 181, 120, 0) 0%, #2C3833 16%, #2C3833 84%, rgba(0, 181, 120, 0) 100%) 1;
-  }
-  body[data-theme="auto"] .record-icon,
-  body[data-theme="auto"] .mcat-icon {
-    background: linear-gradient(180deg, #2A3630, #222C27);
-  }
-  body[data-theme="auto"] .cat-icon {
-    background: linear-gradient(180deg, rgba(0, 181, 120, 0.18), rgba(0, 181, 120, 0.08));
-  }
-  body[data-theme="auto"] .empty-tip {
-    color: #8FA096;
-    background: linear-gradient(180deg, rgba(0, 181, 120, 0.09), rgba(0, 181, 120, 0.04));
-  }
-  body[data-theme="auto"] .chart-box {
-    background: linear-gradient(180deg, rgba(0, 181, 120, 0.08), rgba(0, 181, 120, 0.03));
-  }
-  body[data-theme="auto"] #shopping-text:focus { background: #2A3630; }
-  body[data-theme="auto"] #shopping-text::placeholder { color: #64756D; }
+/* 分类图标小底：深色下加大主题色透明度 */
+body[data-mode="dark"] .cat-icon {
+  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.18), rgba(var(--primary-rgb), 0.08));
 }
 
 /* ----------------------------------------------------------------------
@@ -2430,4 +2201,217 @@ body[data-theme="dark"] #shopping-text::placeholder { color: #64756D; }
 .nlp-close:active {
   color: var(--danger);
   border-color: var(--danger);
+}
+
+/* ======================================================================
+   37. 风格色板（body[data-accent]）
+   每套只覆盖品牌主色族 + 页面背景 + 深色表面色调，其余全部继承；
+   浅色块在前，配套深色块（叠加 [data-mode="dark"]）紧随其后。
+   JS 把用户选择写到 body[data-accent]，与明暗维度自由组合。
+   ====================================================================== */
+
+/* ---- 37.1 深海蓝 ocean ---- */
+body[data-accent="ocean"] {
+  --primary:        #2E7CF6;
+  --primary-dark:   #2568D9;
+  --primary-deep:   #1E5FCB;
+  --primary-light:  #E8F0FE;
+  --primary-border: #BBD4FB;
+  --primary-glow:   rgba(46, 124, 246, 0.14);
+  --primary-bright: #4D96FF;
+  --primary-rgb:    46, 124, 246;
+  --title-color:    #1C2A3E;
+  --bg-page: linear-gradient(180deg, #E1ECFE 0%, #F2F7FE 45%, #FDFEFF 100%);
+}
+body[data-accent="ocean"][data-mode="dark"] {
+  --primary:        #4D96FF;
+  --primary-dark:   #6FA8FF;
+  --primary-deep:   #86B7FF;
+  --primary-light:  #16283F;
+  --primary-border: #2B4A75;
+  --primary-glow:   rgba(77, 150, 255, 0.22);
+  --primary-bright: #6FA8FF;
+  --primary-rgb:    77, 150, 255;
+  --title-color:    #D4E2F7;
+
+  --line:     #263143;
+  --bg-input: #1B2534;
+  --focus-bg: #202B3D;
+  --placeholder: #63718A;
+  --empty-text: #8A99B5;
+  --divider-soft: #2B3A50;
+
+  --surface:      #161D2A;
+  --surface-2:    #1E2736;
+  --surface-soft: #1B2432;
+  --track:        #1E2836;
+  --card-border:  #263143;
+  --tabbar-bg:    rgba(20, 27, 40, 0.92);
+  --tabbar-line:  #1E2836;
+
+  --bg-page: linear-gradient(180deg, #131C2B 0%, #0F1622 55%, #0D121C 100%);
+}
+
+/* ---- 37.2 落日橙 sunset ---- */
+body[data-accent="sunset"] {
+  --primary:        #F2622F;
+  --primary-dark:   #E05524;
+  --primary-deep:   #D64A1E;
+  --primary-light:  #FEEFE7;
+  --primary-border: #FFD0B8;
+  --primary-glow:   rgba(242, 98, 47, 0.14);
+  --primary-bright: #FF8A5C;
+  --primary-rgb:    242, 98, 47;
+  --title-color:    #3A2318;
+  --bg-page: linear-gradient(180deg, #FDE9DC 0%, #FEF5EE 45%, #FFFEFD 100%);
+}
+body[data-accent="sunset"][data-mode="dark"] {
+  --primary:        #FF8A5C;
+  --primary-dark:   #FF9C74;
+  --primary-deep:   #FFAD8A;
+  --primary-light:  #3A241A;
+  --primary-border: #6E3F28;
+  --primary-glow:   rgba(255, 138, 92, 0.22);
+  --primary-bright: #FF9C74;
+  --primary-rgb:    255, 138, 92;
+  --title-color:    #F7DED2;
+
+  --line:     #33261F;
+  --bg-input: #241A14;
+  --focus-bg: #2B1F18;
+  --placeholder: #7A6A60;
+  --empty-text: #A08B7F;
+  --divider-soft: #372A22;
+
+  --surface:      #1D1611;
+  --surface-2:    #271D16;
+  --surface-soft: #241A14;
+  --track:        #271D16;
+  --card-border:  #2E221A;
+  --tabbar-bg:    rgba(26, 19, 14, 0.92);
+  --tabbar-line:  #241A14;
+
+  --bg-page: linear-gradient(180deg, #201510 0%, #190F0B 55%, #140C09 100%);
+}
+
+/* ---- 37.3 暮山紫 dusk ---- */
+body[data-accent="dusk"] {
+  --primary:        #8B6CF0;
+  --primary-dark:   #7A5BE0;
+  --primary-deep:   #6F4FD6;
+  --primary-light:  #F0EBFE;
+  --primary-border: #D4C6FB;
+  --primary-glow:   rgba(139, 108, 240, 0.14);
+  --primary-bright: #A78BFA;
+  --primary-rgb:    139, 108, 240;
+  --title-color:    #2A2140;
+  --bg-page: linear-gradient(180deg, #E9E3FD 0%, #F4F1FE 45%, #FEFDFF 100%);
+}
+body[data-accent="dusk"][data-mode="dark"] {
+  --primary:        #A78BFA;
+  --primary-dark:   #B79DFB;
+  --primary-deep:   #C6B0FC;
+  --primary-light:  #241B3B;
+  --primary-border: #443466;
+  --primary-glow:   rgba(167, 139, 250, 0.22);
+  --primary-bright: #B79DFB;
+  --primary-rgb:    167, 139, 250;
+  --title-color:    #D9CFF5;
+
+  --line:     #2A2340;
+  --bg-input: #1E1930;
+  --focus-bg: #241E3A;
+  --placeholder: #6F6890;
+  --empty-text: #958DBA;
+  --divider-soft: #2E2749;
+
+  --surface:      #171226;
+  --surface-2:    #1F1932;
+  --surface-soft: #1C1730;
+  --track:        #1F1932;
+  --card-border:  #261F3D;
+  --tabbar-bg:    rgba(20, 15, 34, 0.92);
+  --tabbar-line:  #1C1730;
+
+  --bg-page: linear-gradient(180deg, #161126 0%, #110D1D 55%, #0E0B18 100%);
+}
+
+/* ---- 37.4 墨玉黑金 ink（浅色 = 米纸金棕；深色 = 玄黑鎏金，主色按钮文字换深色） ---- */
+body[data-accent="ink"] {
+  --primary:        #9C7A2E;
+  --primary-dark:   #8A6A25;
+  --primary-deep:   #7A5D1E;
+  --primary-light:  #F6F0DD;
+  --primary-border: #E3D5AC;
+  --primary-glow:   rgba(184, 146, 66, 0.16);
+  --primary-bright: #B8923F;
+  --primary-rgb:    184, 146, 66;
+  --title-color:    #2E2A1E;
+  --bg-page: linear-gradient(180deg, #F3EDDC 0%, #F9F5EA 45%, #FEFDF8 100%);
+}
+body[data-accent="ink"][data-mode="dark"] {
+  --primary:        #D9A441;
+  --primary-dark:   #E2B35B;
+  --primary-deep:   #EAC06F;
+  --primary-light:  #2A2313;
+  --primary-border: #5A4A1E;
+  --primary-glow:   rgba(217, 164, 65, 0.22);
+  --primary-bright: #E2B35B;
+  --primary-rgb:    217, 164, 65;
+  --on-primary:     #201805;
+  --title-color:    #EFE6CF;
+
+  --line:     #26282F;
+  --bg-input: #1B1D23;
+  --focus-bg: #22242B;
+  --placeholder: #6B6E78;
+  --empty-text: #8F929C;
+  --divider-soft: #2C2F37;
+
+  --surface:      #17181D;
+  --surface-2:    #1F2127;
+  --surface-soft: #1C1E24;
+  --track:        #23252C;
+  --card-border:  #26282F;
+  --tabbar-bg:    rgba(18, 19, 24, 0.92);
+  --tabbar-line:  #22242B;
+
+  --bg-page: linear-gradient(180deg, #101014 0%, #0C0D10 55%, #0A0B0E 100%);
+}
+
+/* ----------------------------------------------------------------------
+   38. 外观设置：风格色板选择器（管理页「外观」卡片）
+   ---------------------------------------------------------------------- */
+.accent-block { margin-top: 14px; }
+
+.accent-label {
+  font-size: 12px;
+  color: var(--text-grey);
+  margin-bottom: 9px;
+}
+.accent-label b {
+  color: var(--primary-deep);
+  font-weight: 600;
+}
+
+.accent-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.accent-dot {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--dot);
+  border: 2px solid transparent;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85);
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+.accent-dot:active { transform: scale(0.92); }
+.accent-dot.active {
+  border-color: var(--primary);
+  transform: scale(1.06);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 0 3px var(--primary-glow);
 }

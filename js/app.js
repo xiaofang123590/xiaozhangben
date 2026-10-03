@@ -62,18 +62,37 @@ function shiftYm(ym, delta) {
 
 /* ================= 视图切换 ================= */
 
+var VIEW_ORDER = ['record', 'stats', 'budget', 'diet', 'manage'];
+var viewScrollTop = {};        // 每个页签记住自己的滚动位置，切回时恢复
+
 function switchView(view) {
   if (currentView === 'stats' && view !== 'stats') Charts.destroyAll();
+
+  var main = $('app-main');
+  if (main) viewScrollTop[currentView] = main.scrollTop;   // 记住离开时的位置
+
+  var prevIdx = VIEW_ORDER.indexOf(currentView);
+  var nextIdx = VIEW_ORDER.indexOf(view);
   currentView = view;
 
   var views = document.querySelectorAll('.view');
   for (var i = 0; i < views.length; i++) views[i].classList.add('hidden');
-  $('view-' + view).classList.remove('hidden');
+  var incoming = $('view-' + view);
+  incoming.classList.remove('hidden');
+  // 方向感过渡：沿页签顺序前进 / 后退（先清类再强制重排，保证动画重新触发）
+  incoming.classList.remove('view-fwd', 'view-back');
+  if (nextIdx !== prevIdx) {
+    void incoming.offsetWidth;
+    incoming.classList.add(nextIdx > prevIdx ? 'view-fwd' : 'view-back');
+  }
 
   var tabs = document.querySelectorAll('#tab-bar .tab');
   for (var j = 0; j < tabs.length; j++) {
     tabs[j].classList.toggle('active', tabs[j].getAttribute('data-view') === view);
   }
+  // 滑动胶囊指示器跟随激活页签
+  var bar = $('tab-bar');
+  if (bar && nextIdx >= 0) bar.style.setProperty('--tab-index', String(nextIdx));
 
   $('page-title').textContent = VIEW_TITLES[view];
   $('month-nav').classList.toggle('hidden', view === 'manage' || view === 'diet');
@@ -82,7 +101,9 @@ function switchView(view) {
   else if (view === 'stats') renderStats();
   else if (view === 'budget') renderBudget();
   else if (view === 'diet') DietUI.render();
-  else if (view === 'manage') { renderThemeToggle(); renderCategoryManage(); renderBackupHint(); }
+  else if (view === 'manage') { renderThemeToggle(); renderAccentToggle(); renderCategoryManage(); renderBackupHint(); }
+
+  if (main) main.scrollTop = viewScrollTop[view] || 0;     // 恢复该页上次滚动位置
 }
 
 /* ================= 月份导航 ================= */
@@ -102,28 +123,100 @@ function updateMonthLabel() {
   $('month-label').textContent = parseInt(parts[0], 10) + '年' + parseInt(parts[1], 10) + '月';
 }
 
-/* ================= 主题 ================= */
+/* ================= 主题（明暗 data-mode × 风格 data-accent 双维度） ================= */
+
+var ACCENTS = ['mint', 'ocean', 'sunset', 'dusk', 'ink'];
+var ACCENT_NAMES = { mint: '薄荷绿', ocean: '深海蓝', sunset: '落日橙', dusk: '暮山紫', ink: '墨玉黑金' };
+
+var PREF = { mode: 'auto', accent: 'mint' };   // 用户偏好：mode = auto | light | dark
+var mqDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
 
 function themeKey() { return 'jz_theme::' + (Store.storageUser() || ''); }
 
-function loadTheme() {
-  try { return localStorage.getItem(themeKey()) || 'auto'; } catch (e) { return 'auto'; }
+/** 读取偏好：兼容旧版纯字符串（'auto'/'light'/'dark'）与新版 JSON {mode, accent} */
+function loadThemePref() {
+  try {
+    var raw = localStorage.getItem(themeKey());
+    if (!raw) return { mode: 'auto', accent: 'mint' };
+    if (raw === 'auto' || raw === 'light' || raw === 'dark') return { mode: raw, accent: 'mint' };
+    var o = JSON.parse(raw);
+    return {
+      mode: (o && ['auto', 'light', 'dark'].indexOf(o.mode) >= 0) ? o.mode : 'auto',
+      accent: (o && ACCENTS.indexOf(o.accent) >= 0) ? o.accent : 'mint'
+    };
+  } catch (e) { return { mode: 'auto', accent: 'mint' }; }
 }
 
-function applyTheme(theme, silent) {
-  theme = ['auto', 'light', 'dark'].indexOf(theme) >= 0 ? theme : 'auto';
-  try { localStorage.setItem(themeKey(), theme); } catch (e) { /* 忽略 */ }
-  document.body.setAttribute('data-theme', theme);
+function saveThemePref() {
+  try { localStorage.setItem(themeKey(), JSON.stringify(PREF)); } catch (e) { /* 忽略 */ }
+}
+
+/** auto → 按系统深色解析成实际 mode */
+function resolveMode() {
+  return PREF.mode === 'auto' ? (mqDark && mqDark.matches ? 'dark' : 'light') : PREF.mode;
+}
+
+/** 把解析结果应用到 body：data-theme 留给按钮态，data-mode / data-accent 驱动 CSS */
+function applyResolvedTheme(silent) {
+  document.body.setAttribute('data-theme', PREF.mode);
+  document.body.setAttribute('data-mode', resolveMode());
+  document.body.setAttribute('data-accent', PREF.accent);
+  syncMetaColor();
   renderThemeToggle();
-  if (!silent && currentView === 'stats') renderStats(); // 刷新图表配色
+  renderAccentToggle();
+  if (!silent) refreshThemeView();
+}
+
+/** 设置明暗偏好（'auto' | 'light' | 'dark'） */
+function applyTheme(mode, silent) {
+  PREF.mode = ['auto', 'light', 'dark'].indexOf(mode) >= 0 ? mode : 'auto';
+  saveThemePref();
+  applyResolvedTheme(silent);
+}
+
+/** 设置风格色板（ACCENTS 之一），与明暗维度自由组合 */
+function applyAccent(accent, silent) {
+  PREF.accent = ACCENTS.indexOf(accent) >= 0 ? accent : 'mint';
+  saveThemePref();
+  applyResolvedTheme(silent);
+}
+
+/** 状态栏 / 浏览器 UI 颜色跟随当前主题主色 */
+function syncMetaColor() {
+  var meta = document.querySelector('meta[name="theme-color"]');
+  if (!meta) return;
+  var c = '';
+  try { c = getComputedStyle(document.body).getPropertyValue('--primary').trim(); } catch (e) { /* 忽略 */ }
+  if (c) meta.setAttribute('content', c);
 }
 
 function renderThemeToggle() {
-  var cur = document.body.getAttribute('data-theme') || 'auto';
   var btns = document.querySelectorAll('#theme-toggle .type-btn');
   for (var i = 0; i < btns.length; i++) {
-    btns[i].classList.toggle('active', btns[i].getAttribute('data-theme') === cur);
+    btns[i].classList.toggle('active', btns[i].getAttribute('data-theme') === PREF.mode);
   }
+}
+
+function renderAccentToggle() {
+  var btns = document.querySelectorAll('#accent-toggle .accent-dot');
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].classList.toggle('active', btns[i].getAttribute('data-accent') === PREF.accent);
+  }
+  var name = $('accent-name');
+  if (name) name.textContent = ACCENT_NAMES[PREF.accent] || ACCENT_NAMES.mint;
+}
+
+/** 主题变化后刷新当前页里吃主题色的渲染（图表等） */
+function refreshThemeView() {
+  if (currentView === 'stats') renderStats();
+  else if (currentView === 'diet') DietUI.render();
+}
+
+// 「跟随系统」时，系统深浅切换实时生效
+if (mqDark && mqDark.addEventListener) {
+  mqDark.addEventListener('change', function () {
+    if (PREF.mode === 'auto') applyResolvedTheme(false);
+  });
 }
 
 /* ================= 记账页 ================= */
@@ -272,15 +365,45 @@ function renderRecordList() {
 
 /* ================= 统计页 ================= */
 
+/** 汇总数字滚动动画：从 0 计数到目标值（"减弱动态效果"开启时跳过） */
+function animateCountUps(container) {
+  var els = container.querySelectorAll('[data-cu]');
+  for (var i = 0; i < els.length; i++) {
+    (function (el) {
+      var target = parseFloat(el.getAttribute('data-cu'));
+      if (!isFinite(target)) return;
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      var isInt = el.getAttribute('data-int') === '1';
+      var prefix = el.getAttribute('data-prefix') || '';
+      var neg = target < 0;
+      var abs = Math.abs(target);
+      var t0 = null, DUR = 480;
+      function fmt(v) {
+        if (isInt) return String(Math.round(v));
+        return (neg ? '-' : '') + prefix + f(v);
+      }
+      function frame(ts) {
+        if (t0 === null) t0 = ts;
+        var p = Math.min((ts - t0) / DUR, 1);
+        var eased = 1 - Math.pow(1 - p, 3);              // easeOutCubic
+        el.textContent = fmt(abs * eased);
+        if (p < 1) requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    })(els[i]);
+  }
+}
+
 function renderStats() {
   var s = Store.getMonthSummary(currentYm);
 
   $('stat-summary').innerHTML =
-    '<div class="summary-item"><span class="summary-label">收入</span><span class="summary-value">¥' + f(s.income) + '</span></div>' +
-    '<div class="summary-item"><span class="summary-label">支出</span><span class="summary-value">¥' + f(s.expense) + '</span></div>' +
-    '<div class="summary-item"><span class="summary-label">结余</span><span class="summary-value' + (s.balance < 0 ? ' negative' : '') + '">' +
+    '<div class="summary-item"><span class="summary-label">收入</span><span class="summary-value" data-cu="' + s.income + '" data-prefix="¥">¥' + f(s.income) + '</span></div>' +
+    '<div class="summary-item"><span class="summary-label">支出</span><span class="summary-value" data-cu="' + s.expense + '" data-prefix="¥">¥' + f(s.expense) + '</span></div>' +
+    '<div class="summary-item"><span class="summary-label">结余</span><span class="summary-value' + (s.balance < 0 ? ' negative' : '') + '" data-cu="' + s.balance + '" data-prefix="¥">' +
     (s.balance < 0 ? '-' : '') + '¥' + f(Math.abs(s.balance)) + '</span></div>' +
-    '<div class="summary-item"><span class="summary-label">笔数</span><span class="summary-value">' + s.count + '</span></div>';
+    '<div class="summary-item"><span class="summary-label">笔数</span><span class="summary-value" data-cu="' + s.count + '" data-int="1">' + s.count + '</span></div>';
+  animateCountUps($('stat-summary'));
 
   // 分类占比（支出/收入切换）
   var src = pieKind === 'income' ? s.incomeByCategory : s.byCategory;
@@ -820,10 +943,16 @@ function bindEvents() {
   $('budget-save-btn').addEventListener('click', budgetSave);
   $('budget-input').addEventListener('keydown', function (e) { if (e.key === 'Enter') budgetSave(); });
 
-  // 主题
+  // 主题：明暗
   $('theme-toggle').addEventListener('click', function (e) {
     var btn = e.target.closest('.type-btn');
     if (btn) applyTheme(btn.getAttribute('data-theme'));
+  });
+
+  // 主题：风格色板
+  $('accent-toggle').addEventListener('click', function (e) {
+    var btn = e.target.closest('.accent-dot');
+    if (btn) applyAccent(btn.getAttribute('data-accent'));
   });
 
   // 管理页
@@ -1050,7 +1179,11 @@ function startApp(username) {
   $('search-scope').value = 'month';
   DietUI.reset(); // 重置饮食页浏览状态（日期/选中食物等归位到新账户）
   updateMonthLabel();
-  applyTheme(loadTheme(), true);
+  var saved = loadThemePref();          // 应用该账户的主题偏好（mode × accent）
+  PREF.mode = saved.mode;
+  PREF.accent = saved.accent;
+  saveThemePref();
+  applyResolvedTheme(true);
   switchView('record');
   refreshBanner();
   checkReminders();
@@ -1058,6 +1191,7 @@ function startApp(username) {
 
 function boot() {
   detectStandalone();
+  applyResolvedTheme(true);   // 登录前先按系统深浅上主题，避免深色用户白闪
   bindEvents();
   DietUI.init(); // 饮食页事件只绑一次（元素为静态 HTML，与登录状态无关）
   registerServiceWorker();

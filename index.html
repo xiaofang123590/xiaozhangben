@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
 <title>小账本 · 本地记账</title>
 <meta name="theme-color" content="#00B578">
 <!-- PWA / iPhone 添加到主屏幕 -->
@@ -16,6 +16,20 @@
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+
+<script>
+/* 首帧前先按系统深浅设置 data-mode，避免深色用户看到白闪（登录后 app.js 按账户偏好覆盖） */
+(function () {
+  try {
+    var raw = localStorage.getItem('jz_theme::') || '';
+    var mode = 'light';
+    if (raw === 'dark') mode = 'dark';
+    else if (raw === 'light') mode = 'light';
+    else mode = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+    document.body.setAttribute('data-mode', mode);
+  } catch (e) { /* 忽略 */ }
+})();
+</script>
 
 <!-- 登录/注册界面（未登录时显示，由 app.js 控制） -->
 <div id="auth-screen" class="hidden">
@@ -258,6 +272,16 @@
           <button type="button" class="type-btn" data-theme="light">浅色</button>
           <button type="button" class="type-btn" data-theme="dark">深色</button>
         </div>
+        <div class="accent-block">
+          <div class="accent-label">主题风格 · <b id="accent-name">薄荷绿</b></div>
+          <div class="accent-row" id="accent-toggle">
+            <button type="button" class="accent-dot active" data-accent="mint" style="--dot:#00B578" aria-label="薄荷绿" title="薄荷绿"></button>
+            <button type="button" class="accent-dot" data-accent="ocean" style="--dot:#2E7CF6" aria-label="深海蓝" title="深海蓝"></button>
+            <button type="button" class="accent-dot" data-accent="sunset" style="--dot:#F2622F" aria-label="落日橙" title="落日橙"></button>
+            <button type="button" class="accent-dot" data-accent="dusk" style="--dot:#8B6CF0" aria-label="暮山紫" title="暮山紫"></button>
+            <button type="button" class="accent-dot" data-accent="ink" style="--dot:#D9A441" aria-label="墨玉黑金" title="墨玉黑金"></button>
+          </div>
+        </div>
       </div>
       <div class="card">
         <div class="card-head">
@@ -281,8 +305,9 @@
 
   </main>
 
-  <!-- 底部导航 -->
+  <!-- 底部导航（.tab-indicator 为滑动胶囊指示器，位置由 JS 写入 --tab-index） -->
   <nav id="tab-bar">
+    <span class="tab-indicator" aria-hidden="true"></span>
     <button class="tab active" data-view="record"><span class="tab-icon">📝</span><span class="tab-label">记账</span></button>
     <button class="tab" data-view="stats"><span class="tab-icon">📊</span><span class="tab-label">统计</span></button>
     <button class="tab" data-view="budget"><span class="tab-icon">🎯</span><span class="tab-label">预算</span></button>

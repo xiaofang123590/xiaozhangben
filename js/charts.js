@@ -36,11 +36,24 @@
         text: (s.getPropertyValue('--text-main') || '').trim() || FALLBACK.text,
         sub: (s.getPropertyValue('--text-grey') || '').trim() || FALLBACK.sub,
         grid: (s.getPropertyValue('--line') || '').trim() || FALLBACK.grid,
-        surface: (s.getPropertyValue('--surface') || '').trim() || FALLBACK.surface
+        surface: (s.getPropertyValue('--surface') || '').trim() || FALLBACK.surface,
+        primary: (s.getPropertyValue('--primary') || '').trim() || ''
       };
     } catch (e) {
       return FALLBACK;
     }
+  }
+
+  /** 主色（跟随当前风格色板）转 rgba；解析失败回退到内置收入绿 */
+  function incomeColor(alpha) {
+    var m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(theme().primary || '');
+    if (m) {
+      var h = m[1];
+      if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+      return 'rgba(' + parseInt(h.slice(0, 2), 16) + ',' + parseInt(h.slice(2, 4), 16) + ',' +
+             parseInt(h.slice(4, 6), 16) + ',' + alpha + ')';
+    }
+    return alpha >= 1 ? SERIES_INCOME_HOVER : SERIES_INCOME;
   }
 
   /** 系统默认字体族，保证中文正常显示 */
@@ -311,8 +324,8 @@
       datasets.push({
         label: '收入',
         data: rows.map(function (r) { return Number(r.income) || 0; }),
-        backgroundColor: SERIES_INCOME,
-        hoverBackgroundColor: SERIES_INCOME_HOVER,
+        backgroundColor: incomeColor(0.8),
+        hoverBackgroundColor: incomeColor(1),
         borderRadius: 4,
         borderSkipped: false
       });
@@ -492,14 +505,14 @@
       datasets.push({
         label: '收入',
         data: rows.map(function (r) { return Number(r.income) || 0; }),
-        borderColor: 'rgba(0,181,120,1)',
+        borderColor: incomeColor(1),
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
         borderWidth: 2,
         pointRadius: 0,
         pointHoverRadius: 4,
-        pointBackgroundColor: 'rgba(0,149,98,1)'
+        pointBackgroundColor: incomeColor(1)
       });
     }
 
@@ -594,7 +607,7 @@
       };
     });
 
-    var GREEN = 'rgba(0, 181, 120, 0.8)';
+    var GREEN = incomeColor(0.8);   // 健康档跟随当前主题色，橙/红保持语义警示色
     var ORANGE = 'rgba(255, 152, 0, 0.85)';
     var RED = 'rgba(250, 81, 81, 0.85)';
     var colors = rows.map(function (r) {
