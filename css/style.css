@@ -39,8 +39,15 @@
   --surface-soft: #F5F9F6;     /* 行级 hover / active 底色 */
   --track:        #EDF1ED;     /* 进度条 / 对比条浅灰轨道 */
   --card-border:  #EDF2EE;     /* 卡片 1px 描边（浅色内高光） */
-  --tabbar-bg:    rgba(255, 255, 255, 0.94);
-  --tabbar-line:  #ECF0EC;
+  --tabbar-bg:    rgba(255, 255, 255, 0.40);   /* 液态玻璃：半透明让滚动内容透进来 */
+  --tabbar-line:  rgba(255, 255, 255, 0.65);   /* 玻璃外圈亮边 */
+  --glass-sheen:  rgba(255, 255, 255, 0.45);   /* 斜向流光亮端 */
+  --glass-sheen2: rgba(255, 255, 255, 0.14);   /* 斜向流光暗端 */
+  --glass-spec:   rgba(255, 255, 255, 0.85);   /* 顶部镜面高光 */
+  --glass-spec2:  rgba(255, 255, 255, 0.22);   /* 底部弱反光 */
+  --lens-sheen:   rgba(255, 255, 255, 0.62);   /* 指示器透镜亮部 */
+  --lens-tint:    rgba(var(--primary-rgb), 0.26);
+  --lens-ring:    rgba(255, 255, 255, 0.60);
 
   --danger:      #FA5151;
   --danger-deep: #E64340;
@@ -57,9 +64,9 @@
   --shadow-card:  0 2px 14px rgba(var(--primary-rgb), 0.09);   /* 柔和 + 主题色相 */
   --shadow-float: 0 12px 30px rgba(var(--primary-rgb), 0.15);
   --shadow-modal: 0 -8px 30px rgba(0, 0, 0, 0.12);
-  --shadow-tabbar: 0 -4px 16px rgba(var(--primary-rgb), 0.06);
+  --shadow-tabbar: 0 14px 34px rgba(var(--primary-rgb), 0.16), 0 3px 10px rgba(0, 0, 0, 0.10);
   --mask-bg:      rgba(17, 24, 20, 0.5);
-  --tabbar-h: 58px;            /* 底部导航估算高度（不含安全区），Toast 定位用 */
+  --tabbar-h: 70px;            /* 底部导航悬浮胶囊总占位（含底部悬空距离），Toast 定位用 */
 
   /* App Shell 的画布底色：柔和主题色渐变 */
   --bg-page: linear-gradient(180deg, #DFF4E9 0%, #F2FAF5 45%, #FDFEFD 100%);
@@ -195,7 +202,7 @@ input:focus-visible {
   overflow-y: auto;              /* 唯一滚动容器：顶栏/底栏因此天然固定 */
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;  /* 滚到边界不牵动整页，也不触发下拉刷新 */
-  padding: 6px 16px 28px;
+  padding: 6px 16px calc(94px + env(safe-area-inset-bottom, 0px));  /* 底部避让悬浮玻璃 TabBar */
 }
 
 /* 页面切换时的轻过渡（方向感变体见 34.2a；.hidden 移除后动画自动播放） */
@@ -804,20 +811,50 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 }
 
 /* ----------------------------------------------------------------------
-   12. 底部导航 TabBar（App Shell 常驻底栏：普通文档流，天然固定不滚动）
+   12. 底部导航 TabBar（iOS 26 液态玻璃：悬浮胶囊，内容从玻璃后方滚过）
+       真折射（Chromium）由 js/liquid-glass.js 挂上 .lg-refract 走 SVG 位移滤镜；
+       Safari / Firefox 自动走下面的纯毛玻璃降级，观感同样成立。
    ---------------------------------------------------------------------- */
 #tab-bar {
-  position: relative;
-  flex-shrink: 0;
+  position: absolute;            /* 悬浮在滚动内容之上，玻璃后面才有内容可折射 */
+  left: 12px;
+  right: 12px;
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   display: flex;
   align-items: stretch;
   background: var(--tabbar-bg);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  border-top: 1px solid var(--tabbar-line);
+  -webkit-backdrop-filter: blur(14px) saturate(170%);
+  backdrop-filter: blur(14px) saturate(170%);
+  border: 1px solid var(--tabbar-line);
+  border-radius: 999px;
   box-shadow: var(--shadow-tabbar);
-  padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+  padding: 6px;
   z-index: 50;
+}
+
+/* 玻璃光泽层：斜向流光 + 顶部镜面高光（纯叠加，不挡点击） */
+#tab-bar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(155deg,
+              var(--glass-sheen) 0%, transparent 34%,
+              transparent 66%, var(--glass-sheen2) 100%);
+  box-shadow: inset 0 1px 1px var(--glass-spec),
+              inset 0 -1px 1px var(--glass-spec2);
+  pointer-events: none;
+}
+
+/* Chromium 真折射：SVG 位移滤镜（贴图由 JS 按底栏实际尺寸生成） */
+#tab-bar.lg-refract {
+  -webkit-backdrop-filter: url(#liquid-glass-filter);
+  backdrop-filter: url(#liquid-glass-filter);
+}
+
+/* 无 backdrop-filter 的老浏览器：退回实色底，保证可读性 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  #tab-bar { background: var(--surface); }
 }
 
 .tab {
@@ -828,7 +865,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   gap: 3px;
   padding: 5px 0 3px;
   color: var(--text-grey);
-  border-radius: 12px;
+  border-radius: 999px;
   transition: color 0.18s;
 }
 
@@ -1236,8 +1273,15 @@ body[data-mode="dark"] {
   --surface-soft: #232E29;
   --track:        #26312B;
   --card-border:  #2A352F;
-  --tabbar-bg:    rgba(28, 38, 34, 0.92);
-  --tabbar-line:  #26312B;
+  --tabbar-bg:    rgba(26, 36, 31, 0.48);
+  --tabbar-line:  rgba(255, 255, 255, 0.13);
+  --glass-sheen:  rgba(255, 255, 255, 0.10);
+  --glass-sheen2: rgba(255, 255, 255, 0.03);
+  --glass-spec:   rgba(255, 255, 255, 0.30);
+  --glass-spec2:  rgba(255, 255, 255, 0.09);
+  --lens-sheen:   rgba(255, 255, 255, 0.18);
+  --lens-tint:    rgba(var(--primary-rgb), 0.30);
+  --lens-ring:    rgba(255, 255, 255, 0.16);
 
   /* 预算预警 / 超支：深色底 + 亮色字 */
   --warn-bg:   rgba(255, 184, 77, 0.14);
@@ -1251,7 +1295,7 @@ body[data-mode="dark"] {
   --shadow-card:  0 2px 12px rgba(0, 0, 0, 0.4);
   --shadow-float: 0 10px 28px rgba(0, 0, 0, 0.55);
   --shadow-modal: 0 -8px 30px rgba(0, 0, 0, 0.5);
-  --shadow-tabbar: 0 -4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-tabbar: 0 14px 34px rgba(0, 0, 0, 0.50), 0 3px 10px rgba(0, 0, 0, 0.35);
   --mask-bg:      rgba(6, 10, 8, 0.66);
 
   color-scheme: dark;                      /* 日期选择器 / 下拉等原生控件跟随深色 */
@@ -1514,27 +1558,33 @@ body[data-mode="dark"] .banner-info {
   animation: catBreath 2.4s ease-in-out infinite;
 }
 
-/* ---- 34.5 底部导航：滑动胶囊指示器（DOM 里的 .tab-indicator，JS 写入 --tab-index） ---- */
+/* ---- 34.5 底部导航：液态透镜指示器（DOM 里的 .tab-indicator，JS 写入 --tab-index） ---- */
 .tab { position: relative; z-index: 1; }
 .tab-indicator {
   position: absolute;
-  top: 5px;
-  bottom: calc(5px + env(safe-area-inset-bottom, 0px));
-  left: 6px;
-  width: calc((100% - 12px) / 5);          /* 与 5 个等宽页签对齐 */
+  top: 6px;
+  bottom: 6px;
+  left: 7px;
+  width: calc((100% - 14px) / 5);          /* 与 5 个等宽页签对齐 */
   transform: translateX(calc(var(--tab-index, 0) * 100%));
-  transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition: transform 0.38s cubic-bezier(0.3, 1.36, 0.42, 1);  /* 带过冲回弹，滑起来像液体 */
   pointer-events: none;
   z-index: 0;
 }
+/* 透镜本体：玻璃底栏上再叠一层微凸透镜（子级 backdrop-filter 模糊的是父级玻璃的成像） */
 .tab-indicator::before {
   content: "";
   position: absolute;
-  inset: 3px 5px;
-  border-radius: 11px;
-  background: var(--primary-light);
-  box-shadow: inset 0 0 0 1px var(--primary-border);
+  inset: 0;
+  border-radius: 999px;
+  background: linear-gradient(160deg, var(--lens-sheen) 0%, var(--lens-tint) 100%);
+  -webkit-backdrop-filter: blur(10px) saturate(190%) brightness(1.07);
+  backdrop-filter: blur(10px) saturate(190%) brightness(1.07);
+  box-shadow: inset 0 1px 1px var(--glass-spec),
+              inset 0 -1px 2px var(--glass-spec2),
+              inset 0 0 0 1px var(--lens-ring);
 }
+.tab:active .tab-icon { transform: scale(0.85); }   /* 按下时图标轻微收缩，果冻感 */
 
 /* ---- 34.6 快捷工具行：右对齐按钮行 ---- */
 .quick-tools-row {
@@ -2246,8 +2296,8 @@ body[data-accent="ocean"][data-mode="dark"] {
   --surface-soft: #1B2432;
   --track:        #1E2836;
   --card-border:  #263143;
-  --tabbar-bg:    rgba(20, 27, 40, 0.92);
-  --tabbar-line:  #1E2836;
+  --tabbar-bg:    rgba(22, 30, 46, 0.48);
+  --tabbar-line:  rgba(255, 255, 255, 0.13);
 
   --bg-page: linear-gradient(180deg, #131C2B 0%, #0F1622 55%, #0D121C 100%);
 }
@@ -2288,8 +2338,8 @@ body[data-accent="sunset"][data-mode="dark"] {
   --surface-soft: #241A14;
   --track:        #271D16;
   --card-border:  #2E221A;
-  --tabbar-bg:    rgba(26, 19, 14, 0.92);
-  --tabbar-line:  #241A14;
+  --tabbar-bg:    rgba(34, 22, 15, 0.48);
+  --tabbar-line:  rgba(255, 255, 255, 0.13);
 
   --bg-page: linear-gradient(180deg, #201510 0%, #190F0B 55%, #140C09 100%);
 }
@@ -2330,8 +2380,8 @@ body[data-accent="dusk"][data-mode="dark"] {
   --surface-soft: #1C1730;
   --track:        #1F1932;
   --card-border:  #261F3D;
-  --tabbar-bg:    rgba(20, 15, 34, 0.92);
-  --tabbar-line:  #1C1730;
+  --tabbar-bg:    rgba(26, 19, 42, 0.48);
+  --tabbar-line:  rgba(255, 255, 255, 0.13);
 
   --bg-page: linear-gradient(180deg, #161126 0%, #110D1D 55%, #0E0B18 100%);
 }
@@ -2373,8 +2423,8 @@ body[data-accent="ink"][data-mode="dark"] {
   --surface-soft: #1C1E24;
   --track:        #23252C;
   --card-border:  #26282F;
-  --tabbar-bg:    rgba(18, 19, 24, 0.92);
-  --tabbar-line:  #22242B;
+  --tabbar-bg:    rgba(30, 25, 18, 0.48);
+  --tabbar-line:  rgba(255, 255, 255, 0.13);
 
   --bg-page: linear-gradient(180deg, #101014 0%, #0C0D10 55%, #0A0B0E 100%);
 }
