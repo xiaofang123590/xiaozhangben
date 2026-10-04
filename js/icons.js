@@ -77,10 +77,16 @@
   '<symbol id="i-chart-line" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16" /><path d="m19 9-5 5-4-4-3 3" /></symbol>',
   '<symbol id="i-notebook-pen" viewBox="0 0 24 24"><path d="M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4" /><path d="M2 6h4" /><path d="M2 10h4" /><path d="M2 14h4" /><path d="M2 18h4" /><path d="M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z" /></symbol>',
   '<symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" /></symbol>',
+  '<symbol id="i-life" viewBox="0 0 24 24"><path d="M7 20h10" /><path d="M10 20c5.5-2.5.8-6.4 3-10" /><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3.4-4 2.8-.5 4.4 0 5.9.6z" /><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z" /></symbol>',
+  '<symbol id="i-calendar-heart" viewBox="0 0 24 24"><path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" /><path d="M12 13.714c.571-.65 1.221-1.214 2-1.214 1.38 0 2.5 1.045 2.5 2.382 0 .933-.588 1.757-1.308 2.417-.713.654-1.51 1.13-2.04 1.408a.5.5 0 0 1-.446 0c-.53-.278-1.327-.754-2.04-1.408C9.588 16.586 9 15.762 9 14.882c0-1.337 1.12-2.382 2.5-2.382.779 0 1.429.564 2 1.214Z" /></symbol>',
+  '<symbol id="i-graduation-cap" viewBox="0 0 24 24"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z" /><path d="M22 10v6" /><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5" /></symbol>',
+  '<symbol id="i-pin" viewBox="0 0 24 24"><line x1="12" x2="12" y1="17" y2="22" /><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" /></symbol>',
+  '<symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><path d="m7 22-4-4 4-4" /><path d="M21 13v1a4 4 0 0 1-4 4H3" /></symbol>',
+  '<symbol id="i-flame" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" /></symbol>',
   ].join('');
 
   /** 图标名清单（供自检 / 调试用） */
-  var names = 'record stats budget diet manage food transport shopping fun daily home medical study social other salary parttime invest redpacket refund otherincome fallback cart copy save key logout csv export import user plus receipt edit del star warn check close calendar refresh chevron-left chevron-right up-right down-right search chart-line notebook-pen check-circle'.split(' ');
+  var names = 'record stats budget diet manage life food transport shopping fun daily home medical study social other salary parttime invest redpacket refund otherincome fallback cart copy save key logout csv export import user plus receipt edit del star warn check close calendar calendar-heart graduation-cap pin repeat flame refresh chevron-left chevron-right up-right down-right search chart-line notebook-pen check-circle'.split(' ');
 
   function has(name) { return names.indexOf(name) !== -1; }
 

@@ -26,6 +26,22 @@
  *       favorites: [],             // 收藏的食物 id（字符串数组，最多 12 个）
  *       combos: []                 // 常用组合 {id,name,items[],createdAt}（最多 10 个）
  *     },
+ *     days: {                      // 生活模块数据域（旧数据缺失时自动补默认值）
+ *       events: [],                // 纪念日/倒计时事件 {id,title,date,calendar,lunar,
+ *                                  //   mode:'countdown'|'countup',repeat,icon,color,
+ *                                  //   pinned,remindDays[],note,createdAt}
+ *       habits: [],                // 打卡计划 {id,title,icon,color,freq:'daily',
+ *                                  //   records:{'YYYY-MM-DD':1},bestStreak,sort,
+ *                                  //   archived:false,createdAt}
+ *       settings: { sort:'upcoming' }
+ *     },
+ *     vocab: {                     // 背单词模块数据域（骨架先行，学习逻辑后续阶段接入）
+ *       settings: { deck:'cet4', newPerDay:50, reviewCap:200, checkSize:20,
+ *                   examEventId:null, autoCheckHabitId:null },
+ *       progress: {}, known: {}, bookmarks: {}, wrong: {},
+ *       tests: { daily:{}, weekly:{}, monthly:{} },
+ *       stats: { daily:{}, streak:0, lastStudyDate:null }
+ *     },
  *     lastBackupAt: 16961...       // 上次备份（导出 JSON）的毫秒时间戳，Number | null
  *   }
  *
@@ -39,6 +55,8 @@
  *   getDiet()  addDietEntry({date,meal,name,grams,kcal,...})  deleteDietEntry(id)
  *   setDietProfile(profile)  addCustomFood({name,k,p,f,c,g})  deleteCustomFood(id)
  *   toggleFavorite(foodId)  addCombo(name, items)  deleteCombo(id)
+ *   getDays()  addDayEvent({title,date,...})  updateDayEvent(id,patch)  deleteDayEvent(id)
+ *   addHabit({title,icon})  updateHabit(id,patch)  deleteHabit(id)  toggleHabitDay(id,date)
  *   getMonthSummary(ym)  getMonthlyTrend(n)  getBudgetStatus(ym)
  *   exportJSON()  importJSON(text)  exportCSV(ym)
  *   formatAmount(n)  todayStr()  ymOf(dateStr)  currentYm()
@@ -658,19 +676,207 @@ var Store = (function () {
   }
 
   /**
+   * 清洗单个纪念日/倒计时事件；完全无法使用的（无标题或日期非法）返回 null 丢弃
+   * @param {*} e
+   * @param {number} i
+   * @returns {(Object|null)}
+   */
+  function normalizeDayEvent(e, i) {
+    if (!e || typeof e !== 'object' || Array.isArray(e)) {
+      return null;
+    }
+    var title = (typeof e.title === 'string') ? e.title.trim() : '';
+    if (!title) {
+      return null;
+    }
+    var date = normalizeDateStr(e.date);
+    if (!date) {
+      return null;
+    }
+    var remind = [];
+    if (Array.isArray(e.remindDays)) {
+      for (var k = 0; k < e.remindDays.length; k++) {
+        var rd = Number(e.remindDays[k]);
+        if (isFinite(rd) && rd >= 0 && rd <= 90 && remind.indexOf(rd) === -1) {
+          remind.push(rd);
+        }
+      }
+      remind.sort(function (a, b) { return a - b; });
+    }
+    var ev = {
+      id: (typeof e.id === 'string' && e.id) ? e.id : makeUniqueId('ev', null, i),
+      title: title.slice(0, 30),
+      date: date,
+      calendar: (e.calendar === 'lunar') ? 'lunar' : 'solar',
+      lunar: (e.lunar && typeof e.lunar === 'object' && !Array.isArray(e.lunar))
+        ? { m: Number(e.lunar.m) || 1, d: Number(e.lunar.d) || 1, leap: !!e.lunar.leap } : null,
+      // 白名单校验：countdown 倒数（还有 X 天）/ countup 正数（已经 X 天），非法回落倒数
+      mode: (e.mode === 'countup') ? 'countup' : 'countdown',
+      // 'none' 单次 | 'yearly' 每年 | 'monthly' 每月（monthly 二期启用，先容错存储）
+      repeat: (e.repeat === 'yearly' || e.repeat === 'monthly') ? e.repeat : 'none',
+      icon: (typeof e.icon === 'string' && e.icon.trim()) ? e.icon.trim().slice(0, 4) : '📅',
+      color: (typeof e.color === 'string' && COLOR_RE.test(e.color.trim())) ? e.color.trim() : null,
+      pinned: !!e.pinned,
+      remindDays: remind,
+      note: normalizeNote(e.note),
+      createdAt: isFinite(Number(e.createdAt)) ? Number(e.createdAt) : Date.now()
+    };
+    return ev;
+  }
+
+  /**
+   * 清洗单个打卡计划；无标题的返回 null 丢弃
+   * @param {*} h
+   * @param {number} i
+   * @returns {(Object|null)}
+   */
+  function normalizeHabit(h, i) {
+    if (!h || typeof h !== 'object' || Array.isArray(h)) {
+      return null;
+    }
+    var title = (typeof h.title === 'string') ? h.title.trim() : '';
+    if (!title) {
+      return null;
+    }
+    var records = {};
+    if (h.records && typeof h.records === 'object' && !Array.isArray(h.records)) {
+      for (var k in h.records) {
+        if (Object.prototype.hasOwnProperty.call(h.records, k) && normalizeDateStr(k)) {
+          records[normalizeDateStr(k)] = 1;   // 键必须是合法日期；值存不存无所谓
+        }
+      }
+    }
+    var best = Number(h.bestStreak);
+    return {
+      id: (typeof h.id === 'string' && h.id) ? h.id : makeUniqueId('hb', null, i),
+      title: title.slice(0, 20),
+      icon: (typeof h.icon === 'string' && h.icon.trim()) ? h.icon.trim().slice(0, 4) : '✅',
+      color: (typeof h.color === 'string' && COLOR_RE.test(h.color.trim())) ? h.color.trim() : null,
+      freq: 'daily',   // 二期扩展每周 N 次；旧值一律归 daily
+      records: records,
+      bestStreak: (isFinite(best) && best > 0) ? Math.floor(best) : 0,
+      sort: isFinite(Number(h.sort)) && Number(h.sort) > 0 ? Number(h.sort) : i + 1,
+      archived: !!h.archived,
+      createdAt: isFinite(Number(h.createdAt)) ? Number(h.createdAt) : Date.now()
+    };
+  }
+
+  /**
+   * 清洗生活数据域（纪念日/倒计时 + 打卡计划），结构不完整时逐项兜底
+   * @param {*} d
+   * @returns {{events:Array, habits:Array, settings:{sort:string}}}
+   */
+  function sanitizeDays(d) {
+    var out = { events: [], habits: [], settings: { sort: 'upcoming' } };
+    if (!d || typeof d !== 'object' || Array.isArray(d)) {
+      return out;
+    }
+    if (Array.isArray(d.events)) {
+      d.events.forEach(function (e, i) {
+        var ne = normalizeDayEvent(e, i);
+        if (ne) out.events.push(ne);
+      });
+    }
+    if (Array.isArray(d.habits)) {
+      d.habits.forEach(function (h, i) {
+        var nh = normalizeHabit(h, i);
+        if (nh) out.habits.push(nh);
+      });
+    }
+    out.settings = (d.settings && typeof d.settings === 'object' && !Array.isArray(d.settings))
+      ? { sort: d.settings.sort === 'created' ? 'created' : 'upcoming' }
+      : { sort: 'upcoming' };
+    return out;
+  }
+
+  /**
+   * 清洗背单词数据域。本阶段只保证骨架形状合法（键存在、类型正确），
+   * 学习进度的内容校验在词汇模块接入时补齐。
+   * @param {*} v
+   * @returns {Object} 与 defaultData().vocab 同构
+   */
+  function sanitizeVocab(v) {
+    var out = defaultVocab();
+    if (!v || typeof v !== 'object' || Array.isArray(v)) {
+      return out;
+    }
+    var s = v.settings;
+    if (s && typeof s === 'object' && !Array.isArray(s)) {
+      if (s.deck === 'cet6') out.settings.deck = 'cet6';
+      var npd = Number(s.newPerDay);
+      if (isFinite(npd)) out.settings.newPerDay = Math.min(200, Math.max(0, Math.round(npd)));
+      var rc = Number(s.reviewCap);
+      if (isFinite(rc)) out.settings.reviewCap = Math.min(999, Math.max(0, Math.round(rc)));
+      var cs = Number(s.checkSize);
+      if (isFinite(cs)) out.settings.checkSize = Math.min(100, Math.max(5, Math.round(cs)));
+      if (typeof s.examEventId === 'string') out.settings.examEventId = s.examEventId;
+      if (typeof s.autoCheckHabitId === 'string') out.settings.autoCheckHabitId = s.autoCheckHabitId;
+    }
+    // 词级数据只挑出以数字为键的对象，其余形状整体丢弃（宁可丢进度也不崩页面）
+    function pickMap(o) {
+      var m = {};
+      if (!o || typeof o !== 'object' || Array.isArray(o)) return m;
+      for (var k in o) {
+        if (Object.prototype.hasOwnProperty.call(o, k) && /^\d+$/.test(k) &&
+            o[k] && typeof o[k] === 'object' && !Array.isArray(o[k])) {
+          m[k] = o[k];
+        }
+      }
+      return m;
+    }
+    out.progress = { cet4: pickMap(v.progress && v.progress.cet4), cet6: pickMap(v.progress && v.progress.cet6) };
+    out.known = { cet4: pickMap(v.known && v.known.cet4), cet6: pickMap(v.known && v.known.cet6) };
+    out.bookmarks = { cet4: pickMap(v.bookmarks && v.bookmarks.cet4), cet6: pickMap(v.bookmarks && v.bookmarks.cet6) };
+    out.wrong = { cet4: pickMap(v.wrong && v.wrong.cet4), cet6: pickMap(v.wrong && v.wrong.cet6) };
+    if (v.tests && typeof v.tests === 'object' && !Array.isArray(v.tests)) {
+      ['daily', 'weekly', 'monthly'].forEach(function (k) {
+        if (v.tests[k] && typeof v.tests[k] === 'object' && !Array.isArray(v.tests[k])) {
+          out.tests[k] = v.tests[k];
+        }
+      });
+    }
+    if (v.stats && typeof v.stats === 'object' && !Array.isArray(v.stats)) {
+      if (v.stats.daily && typeof v.stats.daily === 'object' && !Array.isArray(v.stats.daily)) {
+        out.stats.daily = v.stats.daily;
+      }
+      out.stats.streak = isFinite(Number(v.stats.streak)) && Number(v.stats.streak) > 0
+        ? Math.floor(Number(v.stats.streak)) : 0;
+      out.stats.lastStudyDate = normalizeDateStr(v.stats.lastStudyDate);
+    }
+    return out;
+  }
+
+  /** 背单词数据域的默认值（defaultData 与 sanitizeVocab 共用） */
+  function defaultVocab() {
+    return {
+      settings: { deck: 'cet4', newPerDay: 50, reviewCap: 200, checkSize: 20,
+        examEventId: null, autoCheckHabitId: null },
+      progress: { cet4: {}, cet6: {} },
+      known: { cet4: {}, cet6: {} },
+      bookmarks: { cet4: {}, cet6: {} },
+      wrong: { cet4: {}, cet6: {} },
+      tests: { daily: {}, weekly: {}, monthly: {} },
+      stats: { daily: {}, streak: 0, lastStudyDate: null }
+    };
+  }
+
+  /**
    * 清洗一份数据对象：结构不完整/字段非法时做兜底，绝不让页面崩溃。
    * 个别彻底无法使用的脏记录/脏分类会被丢弃（金额非法、名称为空）。
    * record.type / category.kind 均按白名单校验，非法回落 'expense'；
    * 记录可选携带商品明细 items（逐条清洗，非法条目丢弃，清洗后为空则不设该键）；
-   * lastBackupAt 缺失或非法补 null；diet 缺失（旧数据）补空默认值。
+   * lastBackupAt 缺失或非法补 null；diet 缺失（旧数据）补空默认值；
+   * days / vocab 缺失（旧数据）补空默认值。
    * @param {*} parsed 从 localStorage 或导入文件解析出的对象
    * @returns {{records:Array, categories:Array, budgets:{monthly:(number|null)},
    *            diet:{profile:(Object|null), entries:Array, customFoods:Array},
-   *            lastBackupAt:(number|null)}}
+   *            days:{events:Array, habits:Array, settings:Object},
+   *            vocab:Object, lastBackupAt:(number|null)}}
    */
   function sanitizeData(parsed) {
     var out = { records: [], categories: [], budgets: { monthly: null, byCategory: {} },
-      diet: { profile: null, entries: [], customFoods: [] }, lastBackupAt: null };
+      diet: { profile: null, entries: [], customFoods: [] }, days: null, vocab: null,
+      lastBackupAt: null };
     if (!parsed || typeof parsed !== 'object') {
       return out;
     }
@@ -745,6 +951,10 @@ var Store = (function () {
     // ---- 饮食（旧数据无 diet 字段时得到空默认值） ----
     out.diet = sanitizeDiet(parsed.diet);
 
+    // ---- 生活（纪念日/倒计时 + 打卡）与背单词（旧数据无字段时得到空默认值） ----
+    out.days = sanitizeDays(parsed.days);
+    out.vocab = sanitizeVocab(parsed.vocab);
+
     // ---- 备份时间 ----
     // 仅接受有限的数字毫秒时间戳；缺失/非法（旧格式数据）一律补 null
     if (typeof parsed.lastBackupAt === 'number' && isFinite(parsed.lastBackupAt)) {
@@ -763,6 +973,8 @@ var Store = (function () {
       categories: DEFAULT_CATEGORIES.concat(DEFAULT_INCOME_CATEGORIES).map(copyObj),
       budgets: { monthly: null, byCategory: {} },
       diet: { profile: null, entries: [], customFoods: [], favorites: [], combos: [] },
+      days: { events: [], habits: [], settings: { sort: 'upcoming' } },
+      vocab: defaultVocab(),
       lastBackupAt: null
     };
   }
@@ -1648,6 +1860,225 @@ var Store = (function () {
     return true;
   }
 
+  // ==================== 对外 API：生活（days：纪念日/倒计时 + 打卡） ====================
+
+  /**
+   * 生活数据域，返回深拷贝（调用方拿到的数组/对象与存储隔离）
+   * @returns {{events:Array, habits:Array, settings:{sort:string}}}
+   */
+  function getDays() {
+    var d = getData().days;
+    return {
+      events: d.events.map(copyObj),
+      habits: d.habits.map(function (h) {
+        var hh = copyObj(h);
+        hh.records = copyObj(h.records);
+        return hh;
+      }),
+      settings: copyObj(d.settings)
+    };
+  }
+
+  /**
+   * 新增纪念日/倒计时事件
+   * @param {{title:string, date:string, mode:string=, repeat:string=,
+   *          icon:string=, color:string=, pinned:boolean=,
+   *          remindDays:number[]|string[]=, note:string=}} input
+   * @returns {Object} 新事件
+   * @throws {Error} '标题不能为空' / '日期不合法'
+   */
+  function addDayEvent(input) {
+    var opts = input || {};
+    var ev = normalizeDayEvent({
+      title: opts.title,
+      date: opts.date,
+      calendar: opts.calendar,
+      lunar: opts.lunar,
+      mode: opts.mode,
+      repeat: opts.repeat,
+      icon: opts.icon,
+      color: opts.color,
+      pinned: opts.pinned,
+      remindDays: opts.remindDays,
+      note: opts.note,
+      createdAt: Date.now()
+    }, 0);
+    if (!ev) {
+      throw new Error(opts.title ? '日期不合法' : '标题不能为空');
+    }
+    var data = getData();
+    data.days.events.push(ev);
+    persist();
+    return copyObj(ev);
+  }
+
+  /**
+   * 更新事件字段（patch 白名单拷贝后整体重新清洗，保证形状始终合法）
+   * @param {string} id
+   * @param {Object} patch 允许键：title/date/calendar/lunar/mode/repeat/icon/
+   *                       color/pinned/remindDays/note
+   * @returns {boolean} 是否找到并更新
+   */
+  function updateDayEvent(id, patch) {
+    var data = getData();
+    var ev = null;
+    data.days.events.forEach(function (e) { if (e.id === id) ev = e; });
+    if (!ev) return false;
+    var p = patch || {};
+    var merged = copyObj(ev);
+    ['title', 'date', 'calendar', 'lunar', 'mode', 'repeat', 'icon', 'color',
+      'pinned', 'remindDays', 'note'].forEach(function (k) {
+      if (Object.prototype.hasOwnProperty.call(p, k)) merged[k] = p[k];
+    });
+    var cleaned = normalizeDayEvent(merged, 0);
+    if (!cleaned) {
+      throw new Error('标题与日期均不可为空');
+    }
+    cleaned.id = ev.id;          // id 不允许被 patch 改掉
+    cleaned.createdAt = ev.createdAt;
+    data.days.events[data.days.events.indexOf(ev)] = cleaned;
+    persist();
+    return true;
+  }
+
+  /** 删除事件；返回是否删除了至少一条 */
+  function deleteDayEvent(id) {
+    var data = getData();
+    var before = data.days.events.length;
+    data.days.events = data.days.events.filter(function (e) {
+      return e.id !== id;
+    });
+    var removed = data.days.events.length < before;
+    // 背单词若绑定了该考试事件，一并解绑（引用完整性）
+    if (removed && data.vocab && data.vocab.settings &&
+        data.vocab.settings.examEventId === id) {
+      data.vocab.settings.examEventId = null;
+    }
+    if (removed) persist();
+    return removed;
+  }
+
+  /**
+   * 新增打卡计划
+   * @param {{title:string, icon:string=, color:string=}} input
+   * @returns {Object} 新计划
+   * @throws {Error} '标题不能为空' / '打卡计划最多 20 个'
+   */
+  function addHabit(input) {
+    var opts = input || {};
+    var h = normalizeHabit({
+      title: opts.title,
+      icon: opts.icon,
+      color: opts.color,
+      records: {},
+      bestStreak: 0,
+      createdAt: Date.now()
+    }, 0);
+    if (!h) {
+      throw new Error('标题不能为空');
+    }
+    var data = getData();
+    if (data.days.habits.length >= 20) {
+      throw new Error('打卡计划最多 20 个');
+    }
+    var maxSort = 0;
+    data.days.habits.forEach(function (x) {
+      if (Number(x.sort) > maxSort) maxSort = Number(x.sort);
+    });
+    h.sort = maxSort + 1;
+    data.days.habits.push(h);
+    persist();
+    return copyObj(h);
+  }
+
+  /**
+   * 更新打卡计划字段
+   * @param {string} id
+   * @param {Object} patch 允许键：title/icon/color/archived/sort
+   * @returns {boolean}
+   */
+  function updateHabit(id, patch) {
+    var data = getData();
+    var h = null;
+    data.days.habits.forEach(function (x) { if (x.id === id) h = x; });
+    if (!h) return false;
+    var p = patch || {};
+    var merged = copyObj(h);
+    ['title', 'icon', 'color', 'archived', 'sort'].forEach(function (k) {
+      if (Object.prototype.hasOwnProperty.call(p, k)) merged[k] = p[k];
+    });
+    var cleaned = normalizeHabit(merged, 0);
+    if (!cleaned) {
+      throw new Error('标题不可为空');
+    }
+    cleaned.id = h.id;
+    data.days.habits[data.days.habits.indexOf(h)] = cleaned;
+    persist();
+    return true;
+  }
+
+  /** 删除打卡计划；返回是否删除 */
+  function deleteHabit(id) {
+    var data = getData();
+    var before = data.days.habits.length;
+    data.days.habits = data.days.habits.filter(function (h) {
+      return h.id !== id;
+    });
+    var removed = data.days.habits.length < before;
+    if (removed && data.vocab && data.vocab.settings &&
+        data.vocab.settings.autoCheckHabitId === id) {
+      data.vocab.settings.autoCheckHabitId = null;
+    }
+    if (removed) persist();
+    return removed;
+  }
+
+  /**
+   * 打卡 / 撤销某计划的某一天，并同步维护 bestStreak
+   * @param {string} id
+   * @param {string} date 'YYYY-MM-DD'
+   * @returns {boolean} 操作后该天是否为已打卡
+   */
+  function toggleHabitDay(id, date) {
+    var d = normalizeDateStr(date);
+    if (!d) {
+      throw new Error('日期不合法');
+    }
+    var data = getData();
+    var h = null;
+    data.days.habits.forEach(function (x) { if (x.id === id) h = x; });
+    if (!h) return false;
+    if (h.records[d]) {
+      delete h.records[d];
+    } else {
+      h.records[d] = 1;
+    }
+    h.bestStreak = calcHabitBestStreak(h);
+    persist();
+    return !!h.records[d];
+  }
+
+  /** 重算一个打卡计划的历史最佳连续天数（全量扫描 records） */
+  function calcHabitBestStreak(h) {
+    var keys = [];
+    for (var k in h.records) {
+      if (Object.prototype.hasOwnProperty.call(h.records, k) && normalizeDateStr(k)) {
+        keys.push(k);
+      }
+    }
+    if (!keys.length) return 0;
+    keys.sort();
+    var best = 1, run = 1;
+    for (var i = 1; i < keys.length; i++) {
+      var prev = new Date(keys[i - 1] + 'T00:00:00');
+      var cur = new Date(keys[i] + 'T00:00:00');
+      var diff = Math.round((cur - prev) / 86400000);
+      run = (diff === 1) ? run + 1 : 1;
+      if (run > best) best = run;
+    }
+    return best;
+  }
+
   // ==================== 对外 API：统计 ====================
 
   /**
@@ -1827,9 +2258,9 @@ var Store = (function () {
   /**
    * 导出完整备份（美化格式 JSON 字符串）。
    * 导出即视为完成一次备份：生成 JSON 前把 lastBackupAt 记为当前时间并持久化。
-   * 记录的可选商品明细（items）随记录一并导出。
+   * 记录的可选商品明细（items）随记录一并导出；饮食 / 生活 / 背单词数据域一并导出。
    * @returns {string} { meta:{app,version,exportedAt}, records, categories,
-   *                     budgets, lastBackupAt }
+   *                     budgets, diet, days, vocab, lastBackupAt }
    */
   function exportJSON() {
     var data = getData();
@@ -1845,6 +2276,8 @@ var Store = (function () {
       categories: data.categories,
       budgets: data.budgets,
       diet: data.diet,
+      days: data.days,
+      vocab: data.vocab,
       lastBackupAt: data.lastBackupAt
     }, null, 2);
   }
@@ -1978,9 +2411,13 @@ var Store = (function () {
       // ---- 饮食（旧格式备份无 diet 字段时得到空默认值） ----
       var diet = sanitizeDiet(parsed.diet);
 
+      // ---- 生活 / 背单词（旧格式备份无字段时得到空默认值） ----
+      var days = sanitizeDays(parsed.days);
+      var vocab = sanitizeVocab(parsed.vocab);
+
       // ---- 校验全部通过，才整体替换并保存 ----
       _data = { records: records, categories: categories, budgets: { monthly: monthly },
-        diet: diet, lastBackupAt: null };
+        diet: diet, days: days, vocab: vocab, lastBackupAt: null };
       // 新格式备份自带 lastBackupAt；旧格式备份没有，保持 null
       if (typeof parsed.lastBackupAt === 'number' && isFinite(parsed.lastBackupAt)) {
         _data.lastBackupAt = parsed.lastBackupAt;
@@ -2178,6 +2615,15 @@ var Store = (function () {
     toggleFavorite: toggleFavorite,
     addCombo: addCombo,
     deleteCombo: deleteCombo,
+    // 生活（days）
+    getDays: getDays,
+    addDayEvent: addDayEvent,
+    updateDayEvent: updateDayEvent,
+    deleteDayEvent: deleteDayEvent,
+    addHabit: addHabit,
+    updateHabit: updateHabit,
+    deleteHabit: deleteHabit,
+    toggleHabitDay: toggleHabitDay,
     // 统计
     getMonthSummary: getMonthSummary,
     getMonthlyTrend: getMonthlyTrend,
