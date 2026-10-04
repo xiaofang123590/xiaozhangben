@@ -99,7 +99,12 @@ var Days = (function () {
     if (ev.mode === 'countup') {
       var up = diffDays(ev.date, today);
       if (up === null) up = 0;
-      return { n: Math.max(0, up), label: '已经', past: false, today: up === 0 };
+      // 周年当天（每年/每月重复）也算 today：高亮卡片、排序提前
+      var isToday = up === 0;
+      if (!isToday && ev.repeat && ev.repeat !== 'none') {
+        isToday = nextOccurrence(ev, today) === today;
+      }
+      return { n: Math.max(0, up), label: '已经', past: false, today: isToday };
     }
     var occ = nextOccurrence(ev, today);
     var m = diffDays(today, occ);

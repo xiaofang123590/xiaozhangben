@@ -103,9 +103,9 @@ var LifeUI = (function () {
       : ' style="--ev-rgb:var(--primary-rgb)"';
 
     var num;
-    if (c.today && ev.mode !== 'countup') {
+    if (c.today && c.n === 0 && ev.mode !== 'countup') {
       num = '<span class="dc-n">今天</span>';
-    } else if (c.today) {
+    } else if (c.today && c.n === 0) {
       num = '<span class="dc-n">第 1 天</span>';
     } else {
       num = '<span class="dc-label">' + c.label + '</span>' +
