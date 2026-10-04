@@ -54,10 +54,9 @@
 
 <div id="app" class="hidden">
 
-  <!-- 提示横幅（智能提醒：晚间未记账 / 备份超期等） -->
-  <div id="info-banner" class="banner banner-info hidden"></div>
-  <!-- 预算提醒横幅（JS 控制：warn 黄色 / over 红色） -->
-  <div id="budget-banner" class="banner hidden"></div>
+  <!-- 开屏简报：打开 App 时弹一次、约 5 秒自动消失（app.js showNotifyPop）。
+       常驻提醒只住在首页通知中心与页内就地提示，不再有钉在每个页面上的悬浮横幅 -->
+  <div id="notify-pop" class="banner hidden"></div>
 
   <header id="app-header">
     <h1 id="page-title">记账</h1>
@@ -69,6 +68,37 @@
   </header>
 
   <main id="app-main">
+
+    <!-- ============ 首页（通知中心 + 分区入口） ============ -->
+    <section id="view-home" class="view hidden">
+      <div class="home-head">
+        <p class="home-greet" id="home-greet">你好</p>
+        <p class="home-date" id="home-date"></p>
+      </div>
+      <!-- 焦点卡：默认最近的考试/纪念日倒计时，没有则显示本月支出（home-ui.js 渲染） -->
+      <div id="home-focus"></div>
+
+      <div class="section-head">
+        <h3 class="section-title">提醒</h3>
+        <span id="home-alert-count" class="section-sum"></span>
+      </div>
+      <div id="home-alerts"></div>
+      <div id="home-alerts-empty" class="card home-quiet hidden">
+        <span class="empty-art"><svg class="ic"><use href="#i-bell"></use></svg></span>
+        <p class="empty-title">一切就绪</p>
+        <p class="empty-sub">预算、日子、打卡有动静时会在这里提醒你</p>
+      </div>
+
+      <div class="section-head">
+        <h3 class="section-title">分区</h3>
+      </div>
+      <div class="home-grid" id="home-grid"></div>
+
+      <div class="section-head">
+        <h3 class="section-title">快捷动作</h3>
+      </div>
+      <div class="home-quick" id="home-quick"></div>
+    </section>
 
     <!-- ============ 记账页 ============ -->
     <section id="view-record" class="view">
@@ -233,89 +263,14 @@
       </div>
     </section>
 
-    <!-- ============ 饮食页 ============ -->
-    <section id="view-diet" class="view hidden">
-      <!-- 今日概览：热量环 + 三大营养素进度 -->
-      <div class="card">
-        <div class="card-head">
-          <h3 class="card-title">今日概览</h3>
-          <input id="diet-date" type="date">
-        </div>
-        <div id="diet-overview"></div>
-      </div>
-
-      <!-- 记一餐：智能记餐 / 搜索食物 → 选份量 → 选餐次 -->
-      <div class="card">
-        <h3 class="card-title">记一餐</h3>
-        <div class="smart-row nlp-row">
-          <input id="diet-nlp-input" type="text" maxlength="50" placeholder="智能记餐：试试「早餐一碗粥一个鸡蛋」" autocomplete="off">
-          <button id="diet-nlp-btn" class="btn-secondary btn-sm">解析</button>
-        </div>
-        <div id="diet-nlp-preview"></div>
-        <div class="food-search-row">
-          <input id="food-search-input" type="text" maxlength="20" placeholder="搜索食物，如：米饭 / 鸡蛋 / 牛奶" autocomplete="off">
-        </div>
-        <div id="food-search-results"></div>
-        <div id="food-pick-panel"></div>
-        <div id="diet-combos"></div>
-        <button id="custom-food-toggle-btn" class="btn-secondary btn-sm food-custom-toggle"><svg class="ic ic-sm"><use href="#i-plus"></use></svg>自定义食物</button>
-        <div id="custom-food-form" class="hidden">
-          <div class="form-row"><label class="form-label">名称</label><input id="cf-name" type="text" maxlength="20" placeholder="如 妈妈牌红烧肉" autocomplete="off"></div>
-          <div class="cf-grid">
-            <div class="form-row"><label class="form-label">热量 kcal/100g</label><input id="cf-kcal" type="number" inputmode="decimal" min="0" step="0.1" placeholder="必填"></div>
-            <div class="form-row"><label class="form-label">蛋白质 g/100g</label><input id="cf-protein" type="number" inputmode="decimal" min="0" step="0.1" placeholder="0"></div>
-            <div class="form-row"><label class="form-label">脂肪 g/100g</label><input id="cf-fat" type="number" inputmode="decimal" min="0" step="0.1" placeholder="0"></div>
-            <div class="form-row"><label class="form-label">碳水 g/100g</label><input id="cf-carb" type="number" inputmode="decimal" min="0" step="0.1" placeholder="0"></div>
-          </div>
-          <div class="form-row"><label class="form-label">默认一份 (g)</label><input id="cf-grams" type="number" inputmode="decimal" min="1" step="1" placeholder="100"></div>
-          <div class="cf-actions">
-            <button id="cf-save-btn" class="btn-primary btn-sm">保存并选中</button>
-          </div>
-          <p class="hint">按每 100g 填写营养值（看包装营养成分表即可），家常菜可按一锅的估算值填写。</p>
-        </div>
-      </div>
-
-      <!-- 当日记录 -->
-      <div class="card">
-        <h3 class="card-title" id="diet-entries-title">当日记录</h3>
-        <div class="entries-tools hidden" id="diet-entries-tools">
-          <button id="diet-copy-prev-btn" class="btn-secondary btn-sm"><svg class="ic ic-sm"><use href="#i-copy"></use></svg>复制前一天</button>
-          <button id="diet-save-combo-btn" class="btn-secondary btn-sm"><svg class="ic ic-sm"><use href="#i-save"></use></svg>存为组合</button>
-        </div>
-        <div id="diet-entries-list"></div>
-      </div>
-
-      <!-- 健康建议 -->
-      <div class="card">
-        <h3 class="card-title">健康建议</h3>
-        <div id="diet-advice-list"></div>
-      </div>
-
-      <!-- 近 7 天热量趋势 -->
-      <div class="card">
-        <h3 class="card-title">近 7 天热量</h3>
-        <div class="chart-box chart-box-sm"><canvas id="diet-trend-chart"></canvas></div>
-        <div id="diet-trend-empty" class="empty-tip empty-icon hidden"><span class="empty-art"><svg class="ic"><use href="#i-chart-line"></use></svg></span>这 7 天还没有饮食记录</div>
-      </div>
-
-      <!-- 个人资料与热量预算 -->
-      <div class="card">
-        <div class="card-head">
-          <h3 class="card-title">热量预算</h3>
-          <button id="diet-profile-toggle-btn" class="btn-secondary btn-sm hidden">修改资料</button>
-        </div>
-        <div id="diet-profile-box"></div>
-        <p class="hint">营养数值为常见做法的估算值，仅供日常健康管理参考，不构成医疗建议。体质特殊或有疾病者请遵医嘱。</p>
-      </div>
-    </section>
-
-    <!-- ============ 生活页（日子 / 背单词 分段切换） ============ -->
+    <!-- ============ 生活页（日子 / 背单词 / 饮食 分段切换） ============ -->
     <section id="view-life" class="view hidden">
-      <!-- 顶部分段切换器：滑动胶囊指示块由 JS 写入 --life-seg（0=日子 1=背单词） -->
+      <!-- 顶部分段切换器：滑动胶囊指示块由 JS 写入 --life-seg（0=日子 1=背单词 2=饮食） -->
       <div class="life-seg" id="life-seg">
         <span class="life-seg-indicator" aria-hidden="true"></span>
         <button type="button" class="life-seg-btn active" data-mod="days"><svg class="ic ic-sm"><use href="#i-calendar-heart"></use></svg>日子</button>
         <button type="button" class="life-seg-btn" data-mod="vocab"><svg class="ic ic-sm"><use href="#i-graduation-cap"></use></svg>背单词</button>
+        <button type="button" class="life-seg-btn" data-mod="diet"><svg class="ic ic-sm"><use href="#i-diet"></use></svg>饮食</button>
       </div>
 
       <!-- 日子模块：上半屏事件卡片切换器，下半屏打卡计划 -->
@@ -351,6 +306,82 @@
           <p class="empty-sub">每日 50 词 · 例句 · 每日自检与周期测试，即将上线</p>
         </div>
       </div>
+
+      <!-- 饮食模块（原独立饮食页整体并入；内部元素 id 与逻辑零改动） -->
+      <div id="life-diet" class="life-mod hidden">
+        <!-- 今日概览：热量环 + 三大营养素进度 -->
+        <div class="card">
+          <div class="card-head">
+            <h3 class="card-title">今日概览</h3>
+            <input id="diet-date" type="date">
+          </div>
+          <div id="diet-overview"></div>
+        </div>
+
+        <!-- 记一餐：智能记餐 / 搜索食物 → 选份量 → 选餐次 -->
+        <div class="card">
+          <h3 class="card-title">记一餐</h3>
+          <div class="smart-row nlp-row">
+            <input id="diet-nlp-input" type="text" maxlength="50" placeholder="智能记餐：试试「早餐一碗粥一个鸡蛋」" autocomplete="off">
+            <button id="diet-nlp-btn" class="btn-secondary btn-sm">解析</button>
+          </div>
+          <div id="diet-nlp-preview"></div>
+          <div class="food-search-row">
+            <input id="food-search-input" type="text" maxlength="20" placeholder="搜索食物，如：米饭 / 鸡蛋 / 牛奶" autocomplete="off">
+          </div>
+          <div id="food-search-results"></div>
+          <div id="food-pick-panel"></div>
+          <div id="diet-combos"></div>
+          <button id="custom-food-toggle-btn" class="btn-secondary btn-sm food-custom-toggle"><svg class="ic ic-sm"><use href="#i-plus"></use></svg>自定义食物</button>
+          <div id="custom-food-form" class="hidden">
+            <div class="form-row"><label class="form-label">名称</label><input id="cf-name" type="text" maxlength="20" placeholder="如 妈妈牌红烧肉" autocomplete="off"></div>
+            <div class="cf-grid">
+              <div class="form-row"><label class="form-label">热量 kcal/100g</label><input id="cf-kcal" type="number" inputmode="decimal" min="0" step="0.1" placeholder="必填"></div>
+              <div class="form-row"><label class="form-label">蛋白质 g/100g</label><input id="cf-protein" type="number" inputmode="decimal" min="0" step="0.1" placeholder="0"></div>
+              <div class="form-row"><label class="form-label">脂肪 g/100g</label><input id="cf-fat" type="number" inputmode="decimal" min="0" step="0.1" placeholder="0"></div>
+              <div class="form-row"><label class="form-label">碳水 g/100g</label><input id="cf-carb" type="number" inputmode="decimal" min="0" step="0.1" placeholder="0"></div>
+            </div>
+            <div class="form-row"><label class="form-label">默认一份 (g)</label><input id="cf-grams" type="number" inputmode="decimal" min="1" step="1" placeholder="100"></div>
+            <div class="cf-actions">
+              <button id="cf-save-btn" class="btn-primary btn-sm">保存并选中</button>
+            </div>
+            <p class="hint">按每 100g 填写营养值（看包装营养成分表即可），家常菜可按一锅的估算值填写。</p>
+          </div>
+        </div>
+
+        <!-- 当日记录 -->
+        <div class="card">
+          <h3 class="card-title" id="diet-entries-title">当日记录</h3>
+          <div class="entries-tools hidden" id="diet-entries-tools">
+            <button id="diet-copy-prev-btn" class="btn-secondary btn-sm"><svg class="ic ic-sm"><use href="#i-copy"></use></svg>复制前一天</button>
+            <button id="diet-save-combo-btn" class="btn-secondary btn-sm"><svg class="ic ic-sm"><use href="#i-save"></use></svg>存为组合</button>
+          </div>
+          <div id="diet-entries-list"></div>
+        </div>
+
+        <!-- 健康建议 -->
+        <div class="card">
+          <h3 class="card-title">健康建议</h3>
+          <div id="diet-advice-list"></div>
+        </div>
+
+        <!-- 近 7 天热量趋势 -->
+        <div class="card">
+          <h3 class="card-title">近 7 天热量</h3>
+          <div class="chart-box chart-box-sm"><canvas id="diet-trend-chart"></canvas></div>
+          <div id="diet-trend-empty" class="empty-tip empty-icon hidden"><span class="empty-art"><svg class="ic"><use href="#i-chart-line"></use></svg></span>这 7 天还没有饮食记录</div>
+        </div>
+
+        <!-- 个人资料与热量预算 -->
+        <div class="card">
+          <div class="card-head">
+            <h3 class="card-title">热量预算</h3>
+            <button id="diet-profile-toggle-btn" class="btn-secondary btn-sm hidden">修改资料</button>
+          </div>
+          <div id="diet-profile-box"></div>
+          <p class="hint">营养数值为常见做法的估算值，仅供日常健康管理参考，不构成医疗建议。体质特殊或有疾病者请遵医嘱。</p>
+        </div>
+      </div>
     </section>
 
     <!-- ============ 管理页 ============ -->
@@ -379,6 +410,12 @@
           <button type="button" class="type-btn" data-theme="light">浅色</button>
           <button type="button" class="type-btn" data-theme="dark">深色</button>
         </div>
+        <div class="accent-label" style="margin-top:14px">启动页</div>
+        <div class="type-toggle theme-toggle" id="launch-toggle">
+          <button type="button" class="type-btn" data-launch="home">首页</button>
+          <button type="button" class="type-btn" data-launch="record">记账</button>
+        </div>
+        <p class="hint">打开小账本时默认进入的页面。</p>
         <div class="accent-block">
           <div class="accent-label">主题风格 · <b id="accent-name">薄荷绿</b><span class="accent-desc" id="accent-desc"></span></div>
           <div class="accent-grid" id="accent-toggle"></div>
@@ -409,10 +446,10 @@
   <!-- 底部导航（.tab-indicator 为滑动胶囊指示器，位置由 JS 写入 --tab-index） -->
   <nav id="tab-bar">
     <span class="tab-indicator" aria-hidden="true"></span>
-    <button class="tab active" data-view="record"><svg class="ic tab-icon"><use href="#i-record"></use></svg><span class="tab-label">记账</span></button>
+    <button class="tab active" data-view="home"><svg class="ic tab-icon"><use href="#i-home"></use></svg><span class="tab-label">首页</span></button>
+    <button class="tab" data-view="record"><svg class="ic tab-icon"><use href="#i-record"></use></svg><span class="tab-label">记账</span></button>
     <button class="tab" data-view="stats"><svg class="ic tab-icon"><use href="#i-stats"></use></svg><span class="tab-label">统计</span></button>
     <button class="tab" data-view="budget"><svg class="ic tab-icon"><use href="#i-budget"></use></svg><span class="tab-label">预算</span></button>
-    <button class="tab" data-view="diet"><svg class="ic tab-icon"><use href="#i-diet"></use></svg><span class="tab-label">饮食</span></button>
     <button class="tab" data-view="life"><svg class="ic tab-icon"><use href="#i-life"></use></svg><span class="tab-label">生活</span></button>
     <button class="tab" data-view="manage"><svg class="ic tab-icon"><use href="#i-manage"></use></svg><span class="tab-label">管理</span></button>
   </nav>
@@ -581,7 +618,16 @@
       <div class="type-toggle" id="day-repeat-toggle">
         <button type="button" class="type-btn active" data-repeat="none">单次</button>
         <button type="button" class="type-btn" data-repeat="yearly">每年</button>
+        <button type="button" class="type-btn" data-repeat="monthly">每月</button>
       </div>
+    </div>
+    <div class="form-row hidden" id="day-calendar-row">
+      <label class="form-label">历法（每年重复用）</label>
+      <div class="type-toggle" id="day-calendar-toggle">
+        <button type="button" class="type-btn active" data-calendar="solar">公历</button>
+        <button type="button" class="type-btn" data-calendar="lunar">农历</button>
+      </div>
+      <p class="hint hidden" id="day-lunar-hint"></p>
     </div>
     <div class="form-row">
       <label class="form-label">图标与颜色</label>
@@ -610,6 +656,7 @@
     <div class="form-row"><label class="form-label">备注</label><input id="day-note-input" type="text" maxlength="30" placeholder="可选" autocomplete="off"></div>
     <div class="modal-actions">
       <button id="day-delete-btn" class="btn-danger hidden">删除</button>
+      <button id="day-share-btn" class="btn-secondary hidden"><svg class="ic ic-sm"><use href="#i-up-right"></use></svg>分享卡片</button>
       <span class="modal-actions-right">
         <button id="day-cancel-btn" class="btn-secondary">取消</button>
         <button id="day-save-btn" class="btn-primary">保存</button>
@@ -626,6 +673,25 @@
     <h3 class="modal-title" id="modal-habit-title">新增打卡计划</h3>
     <div class="form-row"><label class="form-label">名称</label><input id="habit-title-input" type="text" maxlength="12" placeholder="如 每天背单词" autocomplete="off"></div>
     <div class="form-row"><label class="form-label">图标</label><input id="habit-icon-input" type="text" maxlength="4" placeholder="一个 emoji，如 📖" autocomplete="off"></div>
+    <div class="form-row">
+      <label class="form-label">频率</label>
+      <div class="type-toggle" id="habit-freq-toggle">
+        <button type="button" class="type-btn active" data-freq="daily">每天</button>
+        <button type="button" class="type-btn" data-freq="weekly">每周 N 次</button>
+      </div>
+    </div>
+    <div class="form-row hidden" id="habit-times-row">
+      <label class="form-label">每周目标</label>
+      <div class="chip-row" id="habit-times-chips">
+        <button type="button" class="chip" data-times="1">1 次</button>
+        <button type="button" class="chip" data-times="2">2 次</button>
+        <button type="button" class="chip" data-times="3">3 次</button>
+        <button type="button" class="chip" data-times="4">4 次</button>
+        <button type="button" class="chip active" data-times="5">5 次</button>
+        <button type="button" class="chip" data-times="6">6 次</button>
+        <button type="button" class="chip" data-times="7">7 次</button>
+      </div>
+    </div>
     <div class="modal-actions">
       <button id="habit-delete-btn" class="btn-danger hidden">删除</button>
       <span class="modal-actions-right">
@@ -670,8 +736,11 @@
 <script src="js/charts.js"></script>
 <script src="js/insights.js"></script>
 <script src="js/diet-ui.js"></script>
+<script src="js/lunar.js"></script>
 <script src="js/days.js"></script>
 <script src="js/days-ui.js"></script>
+<script src="js/alerts.js"></script>
+<script src="js/home-ui.js"></script>
 <script src="js/spring.js"></script>
 <script src="js/liquid-glass.js"></script>
 <script src="js/app.js"></script>

@@ -708,11 +708,10 @@ var Store = (function () {
       title: title.slice(0, 30),
       date: date,
       calendar: (e.calendar === 'lunar') ? 'lunar' : 'solar',
-      lunar: (e.lunar && typeof e.lunar === 'object' && !Array.isArray(e.lunar))
-        ? { m: Number(e.lunar.m) || 1, d: Number(e.lunar.d) || 1, leap: !!e.lunar.leap } : null,
+      lunar: normalizeLunar(e.lunar),
       // 白名单校验：countdown 倒数（还有 X 天）/ countup 正数（已经 X 天），非法回落倒数
       mode: (e.mode === 'countup') ? 'countup' : 'countdown',
-      // 'none' 单次 | 'yearly' 每年 | 'monthly' 每月（monthly 二期启用，先容错存储）
+      // 'none' 单次 | 'yearly' 每年 | 'monthly' 每月
       repeat: (e.repeat === 'yearly' || e.repeat === 'monthly') ? e.repeat : 'none',
       icon: (typeof e.icon === 'string' && e.icon.trim()) ? e.icon.trim().slice(0, 4) : '📅',
       color: (typeof e.color === 'string' && COLOR_RE.test(e.color.trim())) ? e.color.trim() : null,
@@ -721,7 +720,18 @@ var Store = (function () {
       note: normalizeNote(e.note),
       createdAt: isFinite(Number(e.createdAt)) ? Number(e.createdAt) : Date.now()
     };
+    // 农历事件必须带农历月日，否则降级回公历（有 date 兜底，永不崩）
+    if (ev.calendar === 'lunar' && !ev.lunar) ev.calendar = 'solar';
     return ev;
+  }
+
+  /** 农历月日字段清洗：m 1-12、d 1-30、leap 布尔；形状非法返回 null */
+  function normalizeLunar(l) {
+    if (!l || typeof l !== 'object' || Array.isArray(l)) return null;
+    var m = Math.round(Number(l.m));
+    var d = Math.round(Number(l.d));
+    if (!isFinite(m) || m < 1 || m > 12 || !isFinite(d) || d < 1 || d > 30) return null;
+    return { m: m, d: d, leap: !!l.leap };
   }
 
   /**
@@ -752,13 +762,25 @@ var Store = (function () {
       title: title.slice(0, 20),
       icon: (typeof h.icon === 'string' && h.icon.trim()) ? h.icon.trim().slice(0, 4) : '✅',
       color: (typeof h.color === 'string' && COLOR_RE.test(h.color.trim())) ? h.color.trim() : null,
-      freq: 'daily',   // 二期扩展每周 N 次；旧值一律归 daily
+      freq: normalizeHabitFreq(h.freq),
       records: records,
       bestStreak: (isFinite(best) && best > 0) ? Math.floor(best) : 0,
       sort: isFinite(Number(h.sort)) && Number(h.sort) > 0 ? Number(h.sort) : i + 1,
       archived: !!h.archived,
       createdAt: isFinite(Number(h.createdAt)) ? Number(h.createdAt) : Date.now()
     };
+  }
+
+  /**
+   * 打卡频率清洗：'daily'（或任何非每周形状）→ 'daily'；
+   * {type:'weekly', times:1..7} → 规整后的对象
+   */
+  function normalizeHabitFreq(f) {
+    if (f && typeof f === 'object' && !Array.isArray(f) && f.type === 'weekly') {
+      var t = Math.round(Number(f.times));
+      if (isFinite(t) && t >= 1 && t <= 7) return { type: 'weekly', times: t };
+    }
+    return 'daily';
   }
 
   /**
@@ -1098,6 +1120,15 @@ var Store = (function () {
       },
       lastBackupAt: d.lastBackupAt
     };
+  }
+
+  /**
+   * 上次备份（导出 JSON）的毫秒时间戳；从未备份过返回 null。
+   * 只读探针：供首页通知中心使用，绝不触碰"导出即备份"的写入逻辑。
+   * @returns {(number|null)}
+   */
+  function getLastBackupAt() {
+    return getData().lastBackupAt;
   }
 
   // ==================== 对外 API：加载与保存 ====================
@@ -1970,6 +2001,7 @@ var Store = (function () {
       title: opts.title,
       icon: opts.icon,
       color: opts.color,
+      freq: opts.freq,
       records: {},
       bestStreak: 0,
       createdAt: Date.now()
@@ -2004,7 +2036,7 @@ var Store = (function () {
     if (!h) return false;
     var p = patch || {};
     var merged = copyObj(h);
-    ['title', 'icon', 'color', 'archived', 'sort'].forEach(function (k) {
+    ['title', 'icon', 'color', 'freq', 'archived', 'sort'].forEach(function (k) {
       if (Object.prototype.hasOwnProperty.call(p, k)) merged[k] = p[k];
     });
     var cleaned = normalizeHabit(merged, 0);
@@ -2058,7 +2090,7 @@ var Store = (function () {
     return !!h.records[d];
   }
 
-  /** 重算一个打卡计划的历史最佳连续天数（全量扫描 records） */
+  /** 重算一个打卡计划的历史最佳：daily = 最长连续天数；weekly = 最长连续达标周数 */
   function calcHabitBestStreak(h) {
     var keys = [];
     for (var k in h.records) {
@@ -2068,15 +2100,40 @@ var Store = (function () {
     }
     if (!keys.length) return 0;
     keys.sort();
-    var best = 1, run = 1;
+    // 每周 N 次：按自然周（周一为始）聚合，找最长连续达标周
+    if (h.freq && typeof h.freq === 'object' && h.freq.type === 'weekly') {
+      var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+      var weekKey = function (ds) {
+        var d = new Date(ds + 'T00:00:00');
+        d.setDate(d.getDate() - (d.getDay() + 6) % 7);
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+      };
+      var byWeek = {};
+      keys.forEach(function (ds) {
+        var wk = weekKey(ds);
+        byWeek[wk] = (byWeek[wk] || 0) + 1;
+      });
+      var weeks = Object.keys(byWeek).sort();
+      var best = 0, run = 0, prevMs = null;
+      weeks.forEach(function (wk) {
+        if (byWeek[wk] < h.freq.times) { run = 0; prevMs = null; return; }
+        var ms = new Date(wk + 'T00:00:00').getTime();
+        run = (prevMs !== null && ms - prevMs === 7 * 86400000) ? run + 1 : 1;
+        if (run > best) best = run;
+        prevMs = ms;
+      });
+      return best;
+    }
+    // 每天：最长连续天数
+    var b = 1, r = 1;
     for (var i = 1; i < keys.length; i++) {
       var prev = new Date(keys[i - 1] + 'T00:00:00');
       var cur = new Date(keys[i] + 'T00:00:00');
       var diff = Math.round((cur - prev) / 86400000);
-      run = (diff === 1) ? run + 1 : 1;
-      if (run > best) best = run;
+      r = (diff === 1) ? r + 1 : 1;
+      if (r > b) b = r;
     }
-    return best;
+    return b;
   }
 
   // ==================== 对外 API：统计 ====================
@@ -2632,6 +2689,7 @@ var Store = (function () {
     exportJSON: exportJSON,
     importJSON: importJSON,
     exportCSV: exportCSV,
+    getLastBackupAt: getLastBackupAt,
     // 工具
     formatAmount: formatAmount,
     formatMoney: formatMoney,

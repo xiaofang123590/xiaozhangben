@@ -503,9 +503,46 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   box-shadow: var(--shadow-card);
 }
 
-/* 两条横幅同时出现时上下错开（info 在前，budget 紧随其后） */
-#info-banner:not(.hidden) + #budget-banner:not(.hidden) {
-  top: calc(134px + env(safe-area-inset-top, 0px));
+/* 开屏简报（#notify-pop）：唯一的悬浮通知，弹一次自动消失，不再有常驻横幅。
+   本体可点直达对应分区（app.js popTarget），× 立即关闭 */
+#notify-pop {
+  align-items: center;
+  cursor: pointer;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.28s ease;
+}
+#notify-pop .banner-ic { margin-top: 0; }
+#notify-pop .np-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+#notify-pop .np-text { flex: 1; min-width: 0; }
+#notify-pop .np-more {
+  margin-left: 6px;
+  white-space: nowrap;
+  color: var(--primary-deep);
+  font-weight: 700;
+}
+#notify-pop .np-close {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-grey);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#notify-pop .np-close:active { background: rgba(0, 0, 0, 0.10); }
+#notify-pop.out {               /* 自动 / 手动关闭：上滑淡出 */
+  transform: translateY(-18px);
+  opacity: 0;
 }
 .banner > span { flex: 1; min-width: 0; }
 .banner-ic {
@@ -3888,7 +3925,7 @@ body[data-mode="dark"] .accent-card[data-accent="sakura"] .accent-preview {
   top: 4px;
   bottom: 4px;
   left: 4px;
-  width: calc((100% - 8px) / 2);
+  width: calc((100% - 8px) / 3);   /* 三分段：日子 / 背单词 / 饮食 */
   border-radius: 999px;
   background: var(--surface);
   box-shadow: 0 1px 6px rgba(var(--primary-rgb), 0.16), inset 0 0 0 1px var(--line);
@@ -4193,15 +4230,22 @@ body[data-mode="dark"] .accent-card[data-accent="sakura"] .accent-preview {
 .vocab-placeholder .empty-sub { margin: 0; }
 
 /* 生活 tab 角标：今天有日子或还有打卡没完成时亮红点 */
-.tab[data-badge="1"]::after {
-  content: "";
+/* tab 数字角标：首页 = 全模块通知数（over/warn），生活 = 日子/打卡提醒（值为 1） */
+.tab[data-badge]::after {
+  content: attr(data-badge);
   position: absolute;
-  top: 12%;
-  right: calc(18% - var(--mini, 0) * 4%);
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+  top: 8%;
+  right: calc(14% - var(--mini, 0) * 4%);
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 999px;
   background: #FF3B30;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
   box-shadow: 0 0 0 2px var(--surface);
   z-index: 2;
 }
@@ -4211,4 +4255,217 @@ body[data-mode="dark"] .accent-card[data-accent="sakura"] .accent-preview {
   .life-seg-indicator { transition: none; }
   .habit-check.done { animation: none; }
   .habit-row.habit-justdone { animation: none; }
+}
+/* ----------------------------------------------------------------------
+   40. 首页（通知中心 + 分区入口 + 快捷动作）
+   ---------------------------------------------------------------------- */
+
+.home-head { padding: 6px 2px 2px; }
+.home-greet {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--title-color);
+}
+.home-date {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-grey);
+}
+
+/* 焦点卡复用 .day-card 皮肤；在首页里独立成块、占满宽度 */
+#home-focus { margin-bottom: 6px; }
+#home-focus .day-card { flex: none; width: 100%; }
+#home-focus .dc-money {
+  font-size: 40px;
+  letter-spacing: 0;
+  color: var(--ev-color, var(--primary));
+}
+
+/* ---- 40.1 通知列表 ---- */
+.alert-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: var(--surface);
+  border-radius: 14px;
+  box-shadow: var(--shadow-card);
+  padding: 12px 12px 12px 14px;
+  margin-bottom: 8px;
+  color: var(--text-main);
+  font-size: 14px;
+  transition: transform 0.1s;
+}
+.alert-row:active { transform: scale(0.985); }
+.alert-row::before {           /* 级别色条：红=需处理 黄=注意 蓝=知晓 */
+  content: "";
+  flex-shrink: 0;
+  width: 4px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--primary);
+}
+.alert-row.alert-over::before { background: var(--danger); }
+.alert-row.alert-warn::before { background: #E8842B; }
+.alert-ic {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: rgba(var(--primary-rgb), 0.10);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-deep);
+}
+.alert-row.alert-over .alert-ic { background: rgba(250, 81, 81, 0.12); color: var(--danger); }
+.alert-row.alert-warn .alert-ic { background: rgba(232, 132, 43, 0.14); color: #C96D14; }
+.alert-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.alert-arrow { flex-shrink: 0; color: var(--text-decor); }
+
+.home-quiet { text-align: center; padding: 30px 20px; color: var(--text-grey); }
+.home-quiet .empty-title { margin: 8px 0 4px; font-size: 15px; }
+.home-quiet .empty-sub { margin: 0; font-size: 12px; }
+
+/* ---- 40.2 分区入口网格 ---- */
+.home-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.home-entry {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  border: none;
+  text-align: left;
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 14px;
+  transition: transform 0.1s;
+}
+.home-entry:active { transform: scale(0.97); }
+.home-entry-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: rgba(var(--primary-rgb), 0.10);
+  color: var(--primary-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+.home-entry-icon .ic-sm { width: 18px; height: 18px; }
+.home-entry-name { font-size: 15px; font-weight: 600; color: var(--text-main); }
+.home-entry-sub {
+  font-size: 12px;
+  color: var(--text-grey);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-entry-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 17px;
+  text-align: center;
+}
+
+/* ---- 40.3 快捷动作行 ---- */
+.home-quick {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.home-quick-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 13px 4px 11px;
+  border: none;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--primary-deep);
+  font-size: 12px;
+  font-weight: 500;
+  transition: transform 0.1s;
+}
+.home-quick-btn:active { transform: scale(0.94); }
+.home-quick-btn .ic-sm { width: 20px; height: 20px; }
+
+/* ---- 39.6 阶段2：周打卡进度 + 撒花 ---- */
+.habit-goal {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg-input);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--text-grey);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.habit-goal.met {
+  background: rgba(var(--primary-rgb), 0.12);
+  color: var(--primary-deep);
+  box-shadow: inset 0 0 0 1px var(--primary-border);
+}
+
+/* 撒花：卡片今天高亮时飘一次的彩纸（动画结束后自然消失） */
+.confetti {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+.confetti i {
+  position: absolute;
+  top: -12px;
+  width: 7px;
+  height: 11px;
+  border-radius: 2px;
+  background: var(--c, var(--primary));
+  opacity: 0;
+  transform: rotate(0deg);
+  animation: confetti-drop 1.7s ease-in forwards;
+}
+@keyframes confetti-drop {
+  0% { opacity: 0; transform: translateY(0) rotate(0deg); }
+  8% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(190px) rotate(420deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .confetti { display: none; }
 }

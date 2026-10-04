@@ -23,8 +23,11 @@ var LifeUI = (function () {
   var editingHabitId = null;      // 正在编辑的打卡 id（null = 新增）
   var editMode = 'countdown';     // 弹窗当前方向
   var editRepeat = 'none';        // 弹窗当前重复
+  var editCalendar = 'solar';     // 弹窗当前历法（仅每年重复时可选农历）
   var editRemind = {};            // 弹窗当前提醒档 {0:true,1:false,...}
   var editColor = '';             // 弹窗当前颜色（'' = 跟随主题）
+  var editFreq = 'daily';         // 打卡弹窗频率：'daily' | {type:'weekly',times:N}
+  var confettiShownDate = null;   // 撒花每天只放一次
 
   /** 卡片滑动手势状态 */
   var drag = { active: false, dragging: false, pointerId: -1,
@@ -66,7 +69,7 @@ var LifeUI = (function () {
   function loadSeg() {
     try {
       var v = localStorage.getItem(segKey());
-      return v === 'vocab' ? 'vocab' : 'days';
+      return (v === 'vocab' || v === 'diet') ? v : 'days';
     } catch (e) { return 'days'; }
   }
 
@@ -77,14 +80,17 @@ var LifeUI = (function () {
   /** 当前分段（app.js 记滚动位置用） */
   function currentSeg() { return currentMod; }
 
-  /** 切分段：不跳页，内容原地替换；--life-seg 驱动滑动胶囊 */
+  var SEG_INDEX = { days: 0, vocab: 1, diet: 2 };
+
+  /** 切分段：不跳页，内容原地替换；--life-seg 驱动滑动胶囊（0/1/2 三档） */
   function setSegment(mod) {
-    if (mod !== 'days' && mod !== 'vocab') mod = 'days';
+    if (SEG_INDEX[mod] === undefined) mod = 'days';
     currentMod = mod;
     $('life-days').classList.toggle('hidden', mod !== 'days');
     $('life-vocab').classList.toggle('hidden', mod !== 'vocab');
+    $('life-diet').classList.toggle('hidden', mod !== 'diet');
     var seg = $('life-seg');
-    seg.style.setProperty('--life-seg', mod === 'vocab' ? '1' : '0');
+    seg.style.setProperty('--life-seg', String(SEG_INDEX[mod]));
     var btns = seg.querySelectorAll('.life-seg-btn');
     for (var i = 0; i < btns.length; i++) {
       btns[i].classList.toggle('active', btns[i].getAttribute('data-mod') === mod);
@@ -95,7 +101,7 @@ var LifeUI = (function () {
 
   /* ==================== 日子：卡片切换器 ==================== */
 
-  function cardHTML(ev, today) {
+  function cardHTML(ev, today, withConfetti) {
     var c = Days.eventCountdown(ev, today);
     var rgb = hexToRgb(ev.color);
     var style = rgb
@@ -119,15 +125,23 @@ var LifeUI = (function () {
     } else if (ev.repeat === 'monthly') {
       tags += '<span class="day-card-tag">' + Icons.svg('repeat', 'ic-sm') + '每月</span>';
     }
+    if (ev.calendar === 'lunar' && ev.lunar) {
+      tags += '<span class="day-card-tag">' + Lunar.lunarText(ev.lunar).replace(/^农历/, '') + '</span>';
+    }
     if (ev.pinned) {
       tags += '<span class="day-card-tag">' + Icons.svg('pin', 'ic-sm') + '置顶</span>';
     }
 
+    // 农历事件的日期位显示农历文本（公历换算出的下一次日期已由大数字表达）
+    var dateLabel = (ev.calendar === 'lunar' && ev.lunar && window.Lunar)
+      ? Lunar.lunarText(ev.lunar) : ev.date;
+
     return '<div class="day-card' + (c.today ? ' today' : '') + '" data-id="' + ev.id + '"' + style + '>' +
+      (c.today && withConfetti ? confettiHTML() : '') +
       '<div class="day-card-top">' +
         '<span class="day-card-icon">' + esc(ev.icon || '📅') + '</span>' +
         '<span class="day-card-title">' + esc(ev.title) + '</span>' +
-        '<span class="day-card-date">' + esc(ev.date) + '</span>' +
+        '<span class="day-card-date">' + esc(dateLabel) + '</span>' +
       '</div>' +
       '<div class="day-card-num">' + num + '</div>' +
       (ev.note || tags
@@ -137,6 +151,17 @@ var LifeUI = (function () {
           '</div>'
         : '') +
     '</div>';
+  }
+
+  /** 撒花：14 片彩纸从卡片顶部飘落（纯 CSS 动画，动画结束自然消失） */
+  function confettiHTML() {
+    var colors = ['#FF7043', '#42A5F5', '#AB47BC', '#F4B400', '#26A69A', '#EF5350'];
+    var pieces = '';
+    for (var i = 0; i < 14; i++) {
+      pieces += '<i style="left:' + (4 + i * 6.8) + '%;--c:' + colors[i % colors.length] +
+        ';animation-delay:' + (i * 0.07).toFixed(2) + 's"></i>';
+    }
+    return '<span class="confetti" aria-hidden="true">' + pieces + '</span>';
   }
 
   function updateDots(count) {
@@ -196,7 +221,20 @@ var LifeUI = (function () {
     stage.classList.remove('hidden');
     empty.classList.add('hidden');
 
-    track.innerHTML = events.map(function (ev) { return cardHTML(ev, today); }).join('');
+    // 今天有日子时撒一次花（每天至多一次，重进页面不重复）
+    var confettiFor = null;
+    for (var i = 0; i < events.length; i++) {
+      if (Days.eventCountdown(events[i], today).today) { confettiFor = events[i].id; break; }
+    }
+    var withConfetti = false;
+    if (confettiFor && confettiShownDate !== today) {
+      withConfetti = true;
+      confettiShownDate = today;
+    }
+
+    track.innerHTML = events.map(function (ev) {
+      return cardHTML(ev, today, withConfetti && ev.id === confettiFor);
+    }).join('');
     updateDots(cardCount);
     applyTrack(false);
   }
@@ -204,19 +242,31 @@ var LifeUI = (function () {
   /* ==================== 日子：打卡计划 ==================== */
 
   function habitRowHTML(h, today) {
+    var weekly = Days.isWeekly(h);
     var streak = Days.habitStreak(h, today);
     var last7 = Days.habitLast7(h, today);
     var done = !!h.records[today];
     var dots = last7.map(function (on) {
       return '<i class="' + (on ? 'on' : '') + '"></i>';
     }).join('');
+    // 周打卡：🔥 计周数 + 本周配额进度；每天：🔥 计天数
+    var streakLabel = weekly
+      ? '<span class="habit-streak' + (streak > 0 ? '' : ' zero') + '">' +
+          Icons.svg('flame', 'ic-sm') + streak + ' 周</span>'
+      : '<span class="habit-streak' + (streak > 0 ? '' : ' zero') + '">' +
+          Icons.svg('flame', 'ic-sm') + streak + ' 天</span>';
+    var goal = '';
+    if (weekly) {
+      var wp = Days.habitWeekProgress(h, today);
+      var met = wp.done >= wp.times;
+      goal = '<span class="habit-goal' + (met ? ' met' : '') + '">本周 ' + wp.done + '/' + wp.times + '</span>';
+    }
     return '<div class="habit-row" data-id="' + h.id + '">' +
       '<span class="habit-icon">' + esc(h.icon || '✅') + '</span>' +
       '<span class="habit-main">' +
         '<span class="habit-title">' + esc(h.title) + '</span>' +
         '<span class="habit-meta">' +
-          '<span class="habit-streak' + (streak > 0 ? '' : ' zero') + '">' +
-            Icons.svg('flame', 'ic-sm') + streak + ' 天</span>' +
+          streakLabel + goal +
           '<span class="habit-week">' + dots + '</span>' +
         '</span>' +
       '</span>' +
@@ -275,6 +325,8 @@ var LifeUI = (function () {
     if (currentMod === 'days') {
       renderDays();
       renderHabits();
+    } else if (currentMod === 'diet' && window.DietUI) {
+      DietUI.render();           // 饮食已并入为生活页第 3 分段
     }
     refreshBadge();
   }
@@ -290,6 +342,13 @@ var LifeUI = (function () {
     for (var j = 0; j < repeatBtns.length; j++) {
       repeatBtns[j].classList.toggle('active', repeatBtns[j].getAttribute('data-repeat') === editRepeat);
     }
+    // 历法只在"每年"时有意义
+    $('day-calendar-row').classList.toggle('hidden', editRepeat !== 'yearly');
+    var calBtns = document.querySelectorAll('#day-calendar-toggle .type-btn');
+    for (var c = 0; c < calBtns.length; c++) {
+      calBtns[c].classList.toggle('active', calBtns[c].getAttribute('data-calendar') === editCalendar);
+    }
+    updateLunarHint();
     var remindChips = document.querySelectorAll('#day-remind-chips .chip');
     for (var k = 0; k < remindChips.length; k++) {
       remindChips[k].classList.toggle('active', !!editRemind[remindChips[k].getAttribute('data-remind')]);
@@ -300,13 +359,29 @@ var LifeUI = (function () {
     }
   }
 
+  /** 选中农历后，把用户挑的公历日期换算成农历文本回显 */
+  function updateLunarHint() {
+    var hint = $('day-lunar-hint');
+    if (!hint) return;
+    if (editRepeat !== 'yearly' || editCalendar !== 'lunar') {
+      hint.classList.add('hidden');
+      return;
+    }
+    var L = (window.Lunar && Lunar.solarToLunar) ? Lunar.solarToLunar($('day-date-input').value) : null;
+    hint.textContent = L
+      ? '每年按农历「' + L.text + '」计算' + (L.leap ? '（该年有闰月；无闰月的年份按平月）' : '')
+      : '每年按农历同月同日计算';
+    hint.classList.remove('hidden');
+  }
+
   function openEventModal(ev) {
     editingEventId = ev ? ev.id : null;
     $('modal-day-title').textContent = ev ? '编辑日子' : '新建纪念日 / 倒计时';
     $('day-title-input').value = ev ? ev.title : '';
     $('day-date-input').value = ev ? ev.date : Store.todayStr();
     editMode = ev && ev.mode === 'countup' ? 'countup' : 'countdown';
-    editRepeat = ev && ev.repeat === 'yearly' ? 'yearly' : 'none';
+    editRepeat = ev && ev.repeat === 'yearly' ? 'yearly' : (ev && ev.repeat === 'monthly' ? 'monthly' : 'none');
+    editCalendar = ev && ev.calendar === 'lunar' ? 'lunar' : 'solar';
     editColor = ev && ev.color ? ev.color : '';
     editRemind = {};
     var remind = (ev && Array.isArray(ev.remindDays) && ev.remindDays.length) ? ev.remindDays : [0];
@@ -314,6 +389,7 @@ var LifeUI = (function () {
     $('day-icon-input').value = ev ? (ev.icon || '') : '';
     $('day-note-input').value = ev ? (ev.note || '') : '';
     $('day-delete-btn').classList.toggle('hidden', !ev);
+    $('day-share-btn').classList.toggle('hidden', !ev);
     syncDayToggles();
     $('modal-day').classList.remove('hidden');
   }
@@ -328,9 +404,14 @@ var LifeUI = (function () {
       if (Object.prototype.hasOwnProperty.call(editRemind, k) && editRemind[k]) remind.push(Number(k));
     }
     remind.sort(function (a, b) { return a - b; });
+    // 农历：把挑好的公历日期换算成农历月日，周年按农历递推
+    var useLunar = editRepeat === 'yearly' && editCalendar === 'lunar';
+    var L = (useLunar && window.Lunar) ? Lunar.solarToLunar(date) : null;
     var payload = {
       title: title,
       date: date,
+      calendar: (useLunar && L) ? 'lunar' : 'solar',
+      lunar: (useLunar && L) ? { m: L.m, d: L.d, leap: L.leap } : null,
       mode: editMode,
       repeat: editRepeat,
       icon: $('day-icon-input').value.trim() || '📅',
@@ -352,6 +433,86 @@ var LifeUI = (function () {
     if (window.refreshReminders) window.refreshReminders();
   }
 
+  /* ---- 分享卡片：canvas 画一张"还有 X 天"，Web Share 或下载 ---- */
+
+  function shareEventCard() {
+    var ev = null;
+    var events = Store.getDays().events;
+    for (var i = 0; i < events.length; i++) {
+      if (events[i].id === editingEventId) { ev = events[i]; break; }
+    }
+    if (!ev) return;
+    var today = Store.todayStr();
+    var c = Days.eventCountdown(ev, today);
+    var rgb = hexToRgb(ev.color) || [0, 181, 120];
+
+    var canvas = document.createElement('canvas');
+    canvas.width = 600;
+    canvas.height = 900;
+    var ctx = canvas.getContext('2d');
+    ctx.textAlign = 'center';
+
+    // 背景：白底 + 事件色柔和渐变
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, 600, 900);
+    var g = ctx.createLinearGradient(0, 0, 0, 900);
+    g.addColorStop(0, 'rgba(' + rgb + ',0.18)');
+    g.addColorStop(1, 'rgba(' + rgb + ',0.04)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 600, 900);
+
+    ctx.fillStyle = '#333333';
+    ctx.font = '84px serif';
+    ctx.fillText(ev.icon || '📅', 300, 190);
+    ctx.font = '700 40px sans-serif';
+    ctx.fillText(ev.title, 300, 290);
+
+    ctx.fillStyle = '#8a8f8b';
+    ctx.font = '26px sans-serif';
+    var dateLine = (ev.calendar === 'lunar' && ev.lunar && window.Lunar)
+      ? Lunar.lunarText(ev.lunar) + '（' + ev.date + '）' : ev.date;
+    ctx.fillText(dateLine, 300, 345);
+
+    if (c.today) {
+      ctx.fillStyle = 'rgb(' + rgb + ')';
+      ctx.font = '700 160px sans-serif';
+      ctx.fillText('今天', 300, 580);
+    } else {
+      ctx.fillStyle = '#8a8f8b';
+      ctx.font = '30px sans-serif';
+      ctx.fillText(c.label, 300, 480);
+      ctx.fillStyle = 'rgb(' + rgb + ')';
+      ctx.font = '700 200px sans-serif';
+      ctx.fillText(String(c.n), 300, 660);
+      ctx.fillStyle = '#555555';
+      ctx.font = '32px sans-serif';
+      ctx.fillText('天', 300, 715);
+    }
+
+    ctx.fillStyle = '#b3b8b3';
+    ctx.font = '22px sans-serif';
+    ctx.fillText('小账本 · 本地生活记录', 300, 830);
+
+    canvas.toBlob(function (blob) {
+      if (!blob) { toast('卡片生成失败'); return; }
+      var filename = '小账本-' + ev.title + '.png';
+      if (navigator.canShare && navigator.canShare({ files: [new File([blob], filename, { type: 'image/png' })] })) {
+        navigator.share({ files: [new File([blob], filename, { type: 'image/png' })], title: ev.title })
+          .catch(function () { /* 用户取消分享 */ });
+        return;
+      }
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      toast('图片已生成，可保存或分享');
+    });
+  }
+
   function deleteEvent() {
     if (!editingEventId) return;
     if (!confirm('确定删除这个日子吗？')) return;
@@ -365,12 +526,30 @@ var LifeUI = (function () {
 
   /* ==================== 打卡编辑弹窗 ==================== */
 
+  /** 打卡弹窗控件选中态（频率 toggle + 每周目标 chips） */
+  function syncHabitEditor() {
+    var freqBtns = document.querySelectorAll('#habit-freq-toggle .type-btn');
+    var weekly = editFreq !== 'daily';
+    for (var i = 0; i < freqBtns.length; i++) {
+      var isWeeklyBtn = freqBtns[i].getAttribute('data-freq') === 'weekly';
+      freqBtns[i].classList.toggle('active', isWeeklyBtn === weekly);
+    }
+    $('habit-times-row').classList.toggle('hidden', !weekly);
+    var times = weekly ? editFreq.times : 5;
+    var chips = document.querySelectorAll('#habit-times-chips .chip');
+    for (var j = 0; j < chips.length; j++) {
+      chips[j].classList.toggle('active', Number(chips[j].getAttribute('data-times')) === times);
+    }
+  }
+
   function openHabitModal(h) {
     editingHabitId = h ? h.id : null;
     $('modal-habit-title').textContent = h ? '编辑打卡计划' : '新增打卡计划';
     $('habit-title-input').value = h ? h.title : '';
     $('habit-icon-input').value = h ? (h.icon || '') : '';
+    editFreq = (h && Days.isWeekly(h)) ? { type: 'weekly', times: h.freq.times } : 'daily';
     $('habit-delete-btn').classList.toggle('hidden', !h);
+    syncHabitEditor();
     $('modal-habit').classList.remove('hidden');
   }
 
@@ -379,8 +558,8 @@ var LifeUI = (function () {
     if (!title) { toast('先给它起个名字'); return; }
     var icon = $('habit-icon-input').value.trim() || '✅';
     try {
-      if (editingHabitId) Store.updateHabit(editingHabitId, { title: title, icon: icon });
-      else Store.addHabit({ title: title, icon: icon });
+      if (editingHabitId) Store.updateHabit(editingHabitId, { title: title, icon: icon, freq: editFreq });
+      else Store.addHabit({ title: title, icon: icon, freq: editFreq });
     } catch (e) {
       toast(e.message);
       return;
@@ -522,6 +701,12 @@ var LifeUI = (function () {
       var btn = e.target.closest('.type-btn');
       if (btn) { editRepeat = btn.getAttribute('data-repeat'); syncDayToggles(); }
     });
+    $('day-calendar-toggle').addEventListener('click', function (e) {
+      var btn = e.target.closest('.type-btn');
+      if (btn) { editCalendar = btn.getAttribute('data-calendar'); syncDayToggles(); }
+    });
+    $('day-date-input').addEventListener('change', updateLunarHint);
+    $('day-share-btn').addEventListener('click', shareEventCard);
     $('day-remind-chips').addEventListener('click', function (e) {
       var chip = e.target.closest('.chip');
       if (!chip) return;
@@ -546,6 +731,20 @@ var LifeUI = (function () {
     $('habit-save-btn').addEventListener('click', saveHabit);
     $('habit-cancel-btn').addEventListener('click', function () { $('modal-habit').classList.add('hidden'); });
     $('habit-delete-btn').addEventListener('click', deleteHabit);
+    $('habit-freq-toggle').addEventListener('click', function (e) {
+      var btn = e.target.closest('.type-btn');
+      if (!btn) return;
+      editFreq = btn.getAttribute('data-freq') === 'weekly'
+        ? (editFreq !== 'daily' ? editFreq : { type: 'weekly', times: 5 })
+        : 'daily';
+      syncHabitEditor();
+    });
+    $('habit-times-chips').addEventListener('click', function (e) {
+      var chip = e.target.closest('.chip');
+      if (!chip) return;
+      editFreq = { type: 'weekly', times: Number(chip.getAttribute('data-times')) || 5 };
+      syncHabitEditor();
+    });
 
     // 恢复上次所在分段（不落库的默认是"日子"）
     setSegment(loadSeg());

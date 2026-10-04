@@ -71,6 +71,9 @@ var Days = (function () {
     var t = toDate(today);
     if (!base || !t) return (ev && ev.date) || today;
     if (ev.repeat === 'yearly') {
+      if (ev.calendar === 'lunar' && ev.lunar && window.Lunar) {
+        return nextLunarYearly(ev.lunar, t);
+      }
       var y = t.getFullYear();
       var cand = yearlyCandidate(base, y);
       if (cand < today) cand = yearlyCandidate(base, y + 1);
@@ -87,6 +90,18 @@ var Days = (function () {
       return m;
     }
     return ev.date;
+  }
+
+  /**
+   * 农历周年的下一次发生日：依次尝试今明两个农历年（农历 y 年横跨公历
+   * y ~ y+1），取第一个 ≥ today 的公历日期；闰月目标在该年无闰月时
+   * 由 Lunar 按平月换算，"三十"在小月自动钳到廿九。
+   */
+  function nextLunarYearly(lunar, today) {
+    var y = today.getFullYear();
+    var first = Lunar.lunarToSolar(y, lunar.m, lunar.d, !!lunar.leap);
+    if (first >= toStr(today)) return first;
+    return Lunar.lunarToSolar(y + 1, lunar.m, lunar.d, !!lunar.leap);
   }
 
   /**
@@ -138,18 +153,57 @@ var Days = (function () {
 
   // ==================== 打卡计划 ====================
 
-  /**
-   * 连续打卡天数：今天已打卡则从今天回溯，否则从昨天回溯
-   * （今天还没打不打断连续，晚上打上就接回来了）
-   */
-  function habitStreak(h, today) {
-    var cur = h.records[today] ? today : addDays(today, -1);
+  /** 是否每周 N 次型计划 */
+  function isWeekly(h) {
+    return !!(h && h.freq && typeof h.freq === 'object' && h.freq.type === 'weekly');
+  }
+
+  /** 含 today 的那一周的周一 'YYYY-MM-DD'（周一为一周之始） */
+  function weekStart(today) {
+    var d = toDate(today);
+    if (!d) return today;
+    d.setDate(d.getDate() - (d.getDay() + 6) % 7);
+    return toStr(d);
+  }
+
+  /** 某一周（周一起 7 天）内的打卡次数 */
+  function weekCount(h, ws) {
     var n = 0;
-    while (h.records[cur]) {
-      n += 1;
-      cur = addDays(cur, -1);
+    for (var i = 0; i < 7; i++) {
+      if (h.records[addDays(ws, i)]) n += 1;
     }
     return n;
+  }
+
+  /** 本周打卡进度 {done, times}（daily 计划 times=7/7 无意义，调用方自行判断） */
+  function habitWeekProgress(h, today) {
+    if (!isWeekly(h)) return null;
+    return { done: weekCount(h, weekStart(today)), times: h.freq.times };
+  }
+
+  /**
+   * 连续打卡：daily = 连续天数（今天没打不打断，从昨天回溯）；
+   * weekly = 连续达标周数（本周已达标计入，未达标不打断、从上周回溯）
+   */
+  function habitStreak(h, today) {
+    if (isWeekly(h)) {
+      var n = 0;
+      var ws = weekStart(today);
+      if (weekCount(h, ws) >= h.freq.times) n += 1;
+      ws = addDays(ws, -7);
+      while (weekCount(h, ws) >= h.freq.times) {
+        n += 1;
+        ws = addDays(ws, -7);
+      }
+      return n;
+    }
+    var cur = h.records[today] ? today : addDays(today, -1);
+    var m = 0;
+    while (h.records[cur]) {
+      m += 1;
+      cur = addDays(cur, -1);
+    }
+    return m;
   }
 
   /** 最近 7 天打卡布尔数组：[6 天前 … 今天]，供行内圆点展示 */
@@ -190,10 +244,12 @@ var Days = (function () {
     return out;
   }
 
-  /** 今天还没打卡的计划（未归档），按 sort 顺序 */
+  /** 今天还没完成的计划（未归档）：daily 看当天、weekly 看本周配额 */
   function uncheckedHabits(today) {
     return Store.getDays().habits.filter(function (h) {
-      return !h.archived && !h.records[today];
+      if (h.archived) return false;
+      if (isWeekly(h)) return weekCount(h, weekStart(today)) < h.freq.times;
+      return !h.records[today];
     });
   }
 
@@ -203,6 +259,8 @@ var Days = (function () {
     nextOccurrence: nextOccurrence,
     eventCountdown: eventCountdown,
     sortEvents: sortEvents,
+    isWeekly: isWeekly,
+    habitWeekProgress: habitWeekProgress,
     habitStreak: habitStreak,
     habitLast7: habitLast7,
     todayEvents: todayEvents,

@@ -83,10 +83,11 @@
   '<symbol id="i-pin" viewBox="0 0 24 24"><line x1="12" x2="12" y1="17" y2="22" /><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" /></symbol>',
   '<symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><path d="m7 22-4-4 4-4" /><path d="M21 13v1a4 4 0 0 1-4 4H3" /></symbol>',
   '<symbol id="i-flame" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" /></symbol>',
+  '<symbol id="i-bell" viewBox="0 0 24 24"><path d="M10.268 21a2 2 0 0 0 3.464 0" /><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" /></symbol>',
   ].join('');
 
   /** 图标名清单（供自检 / 调试用） */
-  var names = 'record stats budget diet manage life food transport shopping fun daily home medical study social other salary parttime invest redpacket refund otherincome fallback cart copy save key logout csv export import user plus receipt edit del star warn check close calendar calendar-heart graduation-cap pin repeat flame refresh chevron-left chevron-right up-right down-right search chart-line notebook-pen check-circle'.split(' ');
+  var names = 'record stats budget diet manage life home food transport shopping fun daily medical study social other salary parttime invest redpacket refund otherincome fallback cart copy save key logout csv export import user plus receipt edit del star warn check close bell calendar calendar-heart graduation-cap pin repeat flame refresh chevron-left chevron-right up-right down-right search chart-line notebook-pen check-circle'.split(' ');
 
   function has(name) { return names.indexOf(name) !== -1; }
 

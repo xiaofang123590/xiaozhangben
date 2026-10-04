@@ -8,7 +8,7 @@
 
 var $ = function (id) { return document.getElementById(id); };
 
-var VIEW_TITLES = { record: '记账', stats: '统计', budget: '预算', diet: '饮食', life: '生活', manage: '管理' };
+var VIEW_TITLES = { home: '首页', record: '记账', stats: '统计', budget: '预算', life: '生活', manage: '管理' };
 var WEEKS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
 var data = null;              // Store 数据缓存
@@ -110,14 +110,20 @@ function shiftYm(ym, delta) {
 
 /* ================= 视图切换 ================= */
 
-var VIEW_ORDER = ['record', 'stats', 'budget', 'diet', 'life', 'manage'];
+var VIEW_ORDER = ['home', 'record', 'stats', 'budget', 'life', 'manage'];
 var viewScrollTop = {};        // 每个页签记住自己的滚动位置，切回时恢复
 var viewFadeTimer = 0;
 
-/** 滚动位置的记忆键：生活页按细分段（days/vocab）各记各的 */
+/** 滚动位置的记忆键：生活页按细分段（days/vocab/diet）各记各的 */
 function scrollKeyOf(view) {
   return (view === 'life' && window.LifeUI) ? 'life:' + LifeUI.currentSeg() : view;
 }
+
+/** 跨页跳转入口：首页通知/入口卡/快捷动作都用它；mod 可选（life 的分段） */
+window.goTo = function (view, mod) {
+  switchView(view);
+  if (mod && window.LifeUI) LifeUI.setSegment(mod);
+};
 
 /**
  * 入场：从略小淡入——朝结果稍微「长」一点，比单纯插值有方向感。
@@ -177,14 +183,15 @@ function switchView(view) {
   if (bar && nextIdx >= 0) bar.style.setProperty('--tab-index', String(nextIdx));
 
   $('page-title').textContent = VIEW_TITLES[view];
-  $('month-nav').classList.toggle('hidden', view === 'manage' || view === 'diet' || view === 'life');
+  $('month-nav').classList.toggle('hidden', view === 'manage' || view === 'life' || view === 'home');
 
-  if (view === 'record') { renderQuickCategories(); renderRecordList(); }
+  if (view === 'home') HomeUI.render();
+  else if (view === 'record') { renderQuickCategories(); renderRecordList(); }
   else if (view === 'stats') { Charts.destroyAll(); renderStats(); }
   else if (view === 'budget') renderBudget();
-  else if (view === 'diet') DietUI.render();
   else if (view === 'life') LifeUI.render();
-  else if (view === 'manage') { renderThemeToggle(); renderAccentToggle(); renderEncRow(); renderCategoryManage(); renderBackupHint(); }
+  else if (view === 'manage') { renderThemeToggle(); renderAccentToggle(); renderLaunchToggle(); renderEncRow(); renderCategoryManage(); renderBackupHint(); }
+
 
   if (main) main.scrollTop = viewScrollTop[scrollKeyOf(view)] || 0;     // 恢复该页上次滚动位置
 
@@ -403,7 +410,8 @@ function encConfirm() {
 /** 主题变化后刷新当前页里吃主题色的渲染（图表等） */
 function refreshThemeView() {
   if (currentView === 'stats') renderStats();
-  else if (currentView === 'diet') DietUI.render();
+  else if (currentView === 'life') LifeUI.render();   // 饮食分段由 LifeUI.render 内部调起
+  else if (currentView === 'home') HomeUI.render();
 }
 
 // 「跟随系统」时，系统深浅切换实时生效
@@ -582,8 +590,7 @@ function quickSave() {
   successFlash(quickType === 'income' ? '收入已记录' : '已记一笔');
   renderRecordList();
   renderQuickCategories();          // 刚记的分类使用次数变了，常用排序随之更新
-  refreshBanner();
-  checkReminders();
+  refreshAlertsUI();
 }
 
 /* ---------- 英雄卡：本月支出一眼可见 ---------- *//* 结构：大数字（含环比）+ 收入/结余/笔数 + 近 7 天迷你柱 + 预算进度
@@ -1137,74 +1144,83 @@ function budgetSave() {
   } catch (e) { toast(e.message); return; }
   renderBudget();
   renderHero();                                  // 英雄卡里的预算进度同步
-  refreshBanner();
+  refreshAlertsUI();
 }
 
-/* ================= 提醒横幅 ================= */
+/* ================= 通知：首页角标 + 开屏简报（无常驻悬浮横幅） ================= */
 
 /** 横幅内容：图标 + 文案（情绪靠图标与底色表达，不用 emoji） */
 function bannerHTML(icon, text) {
   return Icons.svg(icon, 'banner-ic') + '<span>' + esc(text) + '</span>';
 }
 
-function refreshBanner() {
-  var banner = $('budget-banner');
-  var status = Store.getBudgetStatus(Store.currentYm());
-  if (status.level === 'warn') {
-    banner.className = 'banner banner-warn';
-    banner.innerHTML = bannerHTML('warn', '本月预算已用 ' + status.usedPct + '%，剩余 ¥' +
-      f(status.remaining) + '，省着点花~');
-  } else if (status.level === 'over') {
-    banner.className = 'banner banner-over';
-    banner.innerHTML = bannerHTML('warn', '本月已超支 ¥' + f(Math.abs(status.remaining)) + '，注意控制开销！');
-  } else {
-    banner.className = 'banner hidden';
-  }
+/**
+ * 首页 tab 角标：over/warn 级通知数。首页是唯一的常驻通知中心，
+ * 其它任何页面都不再挂常驻横幅；info 级不计入，避免角标常亮。
+ */
+function refreshHomeBadge() {
+  var tab = document.querySelector('.tab[data-view="home"]');
+  if (!tab) return;
+  var n = Alerts.collect().filter(function (a) {
+    return a.level === 'over' || a.level === 'warn';
+  }).length;
+  if (n) tab.setAttribute('data-badge', String(n));
+  else tab.removeAttribute('data-badge');
 }
 
-/**
- * 打开时提醒（本地应用无推送通道，打开页面时提示）。优先级：
- * 1. 今天的日子（生日 / 纪念日 / 考试，全天可见）
- * 2. 晚 8 点后：还没记账 / 还没打卡（合并成一条）
- * 生活 tab 的角标也在这里顺带刷新。
- */
-function checkReminders() {
-  var info = $('info-banner');
-  var today = Store.todayStr();
-  var hour = new Date().getHours();
-  var msg = '';
-
-  if (window.Days) {
-    var todays = Days.todayEvents(today);
-    if (todays.length) {
-      msg = '今天是「' + todays[0].title + '」' +
-        (todays[0].repeat === 'yearly' ? '，纪念日快乐！' : '，别忘啦！');
-    }
-  }
-
-  if (!msg && hour >= 20) {
-    var parts = [];
-    var records = Store.getRecords();
-    var hasToday = false;
-    for (var i = 0; i < records.length; i++) {
-      if (records[i].date === today) { hasToday = true; break; }
-    }
-    if (!hasToday) parts.push('记账');
-    if (window.Days && Days.uncheckedHabits(today).length) parts.push('打卡');
-    if (parts.length) msg = '今天还没有' + parts.join('、') + '哦，花点时间完成吧~';
-  }
-
-  if (msg) {
-    info.className = 'banner banner-info';
-    info.innerHTML = bannerHTML('calendar', msg);
-  } else {
-    info.className = 'banner hidden';
-  }
+/** 数据变化后刷新全部角标（首页 + 生活），不打扰当前操作 */
+function refreshAlertsUI() {
+  if (window.Alerts) refreshHomeBadge();
   if (window.LifeUI) LifeUI.refreshBadge();
 }
 
-/** 日子 / 打卡数据变化后由 days-ui.js 调用：横幅与角标同步 */
-window.refreshReminders = function () { refreshBanner(); checkReminders(); };
+/* ---- 开屏简报：打开 App 时弹一次，约 5 秒自动消失；点本体直达，点 × 关闭 ---- */
+
+var popTimer = 0;
+var popTarget = null;   // 当前简报对应的跳转目标 {view, mod}
+
+function hideNotifyPop(immediate) {
+  clearTimeout(popTimer);
+  var pop = $('notify-pop');
+  if (!pop || pop.classList.contains('hidden')) return;
+  if (immediate) {
+    pop.classList.add('hidden');
+    pop.classList.remove('out');
+    return;
+  }
+  pop.classList.add('out');
+  setTimeout(function () {
+    pop.classList.add('hidden');
+    pop.classList.remove('out');
+  }, 320);
+}
+
+function showNotifyPop() {
+  var alerts = Alerts.collect();
+  var top = alerts[0];
+  if (!top || top.level === 'none') return;    // 没有通知就保持安静
+  var pop = $('notify-pop');
+  popTarget = top.go || null;
+  pop.className = 'banner banner-' + top.level;
+  pop.classList.remove('hidden', 'out');
+  void pop.offsetWidth;                        // 重排以重放入场动画
+  var more = alerts.length - 1;
+  pop.innerHTML =
+    '<span class="np-body">' + bannerHTML(top.icon, top.text) +
+      (more ? '<b class="np-more">还有 ' + more + ' 条 →</b>' : '') + '</span>' +
+    '<button type="button" class="np-close" aria-label="关闭">' + Icons.svg('close', 'ic-sm') + '</button>';
+  clearTimeout(popTimer);
+  popTimer = setTimeout(function () { hideNotifyPop(); }, 5200);
+}
+
+/** 启动入口：刷新角标 + 弹开屏简报（全 App 只有这一处会弹） */
+function openAppBriefing() {
+  refreshAlertsUI();
+  showNotifyPop();
+}
+
+/** 日子 / 打卡数据变化后由 days-ui.js 调用：只刷角标，不打扰 */
+window.refreshReminders = refreshAlertsUI;
 
 /** 备份超期提醒（管理页） */
 function renderBackupHint() {
@@ -1425,8 +1441,7 @@ function saveShopping() {
   toggleShoppingCard(false);
   successFlash('已记 ' + res.items.length + ' 件 · 合计 ¥' + f(res.total));
   renderRecordList();
-  refreshBanner();
-  checkReminders();
+  refreshAlertsUI();
 }
 
 function editSave() {
@@ -1446,8 +1461,7 @@ function editSave() {
   closeModal($('modal-record'));
   toast('已保存 ✓');
   renderRecordList();
-  refreshBanner();
-  checkReminders();
+  refreshAlertsUI();
 }
 
 function editDelete() {
@@ -1457,8 +1471,7 @@ function editDelete() {
   closeModal($('modal-record'));
   toast('已删除');
   renderRecordList();
-  refreshBanner();
-  checkReminders();
+  refreshAlertsUI();
 }
 
 /* ================= 导入导出 ================= */
@@ -1489,7 +1502,7 @@ function importJSON(file) {
     renderCategoryManage();
     renderBackupHint();
     renderRecordList();                       // 恢复后明细与英雄卡同步刷新
-    refreshBanner();
+    refreshAlertsUI();
   };
   reader.readAsText(file, 'utf-8');
 }
@@ -1651,6 +1664,17 @@ function bindEvents() {
     tabs[i].addEventListener('click', function () { switchView(this.getAttribute('data-view')); });
   }
 
+  // 开屏简报：点本体直达对应分区，点 × 关闭
+  $('notify-pop').addEventListener('click', function (e) {
+    if (e.target.closest('.np-close')) { hideNotifyPop(true); return; }
+    if (popTarget) {
+      var go = popTarget;
+      popTarget = null;
+      hideNotifyPop(true);
+      window.goTo(go.view, go.mod || '');
+    }
+  });
+
   // 月份切换
   $('month-prev').addEventListener('click', function () { shiftMonth(-1); });
   $('month-next').addEventListener('click', function () { shiftMonth(1); });
@@ -1748,6 +1772,15 @@ function bindEvents() {
   $('theme-toggle').addEventListener('click', function (e) {
     var btn = e.target.closest('.type-btn');
     if (btn) applyTheme(btn.getAttribute('data-theme'));
+  });
+
+  // 启动页：首页 / 记账
+  $('launch-toggle').addEventListener('click', function (e) {
+    var btn = e.target.closest('.type-btn');
+    if (!btn) return;
+    setLaunchPref(btn.getAttribute('data-launch'));
+    renderLaunchToggle();
+    toast('已设置启动页');
   });
 
   // 主题：风格色板（预览卡网格）
@@ -2073,17 +2106,19 @@ function handleLaunchParams() {
     return;
   }
   if (action === 'meal') {
-    switchView('diet');
+    switchView('life');                    // 饮食已并入生活页分段
+    if (window.LifeUI) LifeUI.setSegment('diet');
     clearQuery();
     var mealInput = $('diet-nlp-input');
     if (mealInput) mealInput.focus();
     return;
   }
-  if (['record', 'stats', 'budget', 'diet', 'life', 'manage'].indexOf(view) >= 0) {
+  if (view === 'diet') view = 'life';      // 旧深链 /view=diet 兼容：落到生活页
+  if (['home', 'record', 'stats', 'budget', 'life', 'manage'].indexOf(view) >= 0) {
     switchView(view);
     // ?view=life&mod=vocab → 直接落到指定分段（深链 / 桌面快捷方式用）
     var mod = q.get('mod') || '';
-    if (view === 'life' && window.LifeUI && ['days', 'vocab'].indexOf(mod) >= 0) {
+    if (view === 'life' && window.LifeUI && ['days', 'vocab', 'diet'].indexOf(mod) >= 0) {
       LifeUI.setSegment(mod);
     }
     clearQuery();
@@ -2117,10 +2152,31 @@ function startApp(username) {
   PREF.accent = saved.accent;
   saveThemePref();
   applyResolvedTheme(true);
-  switchView('record');
-  refreshBanner();
-  checkReminders();
+  switchView(loadLaunchPref());         // 启动页：默认首页，可设回记账
+  openAppBriefing();                    // 刷新角标 + 开屏简报（全 App 唯一会弹的地方）
   handleLaunchParams();                 // 快捷方式 / 分享进来的启动参数
+}
+
+/** 启动页偏好（按账户记忆）：'home' | 'record' */
+function launchKey() { return 'jz_launch::' + (Store.storageUser() || ''); }
+
+function loadLaunchPref() {
+  try {
+    return localStorage.getItem(launchKey()) === 'record' ? 'record' : 'home';
+  } catch (e) { return 'home'; }
+}
+
+function setLaunchPref(v) {
+  try { localStorage.setItem(launchKey(), v === 'record' ? 'record' : 'home'); } catch (e) { /* 忽略 */ }
+}
+
+/** 管理页「启动页」开关的选中态 */
+function renderLaunchToggle() {
+  var cur = loadLaunchPref();
+  var btns = document.querySelectorAll('#launch-toggle .type-btn');
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].classList.toggle('active', btns[i].getAttribute('data-launch') === cur);
+  }
 }
 
 function boot() {
@@ -2129,7 +2185,8 @@ function boot() {
   bindEvents();
   DietUI.init(); // 饮食页事件只绑一次（元素为静态 HTML，与登录状态无关）
   Insights.init(); // 统计页洞察轮播只绑一次
-  if (window.LifeUI) LifeUI.init(); // 生活页（日子/背单词）分段切换与弹窗只绑一次
+  if (window.LifeUI) LifeUI.init(); // 生活页（日子/背单词/饮食）分段切换与弹窗只绑一次
+  if (window.HomeUI) HomeUI.init(); // 首页通知中心/入口卡/快捷动作只绑一次
   registerServiceWorker();
   var user = Auth.currentUser();
   if (user) {
