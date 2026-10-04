@@ -890,6 +890,9 @@
     hideTip();
   };
 
+  /** 收起数据浮层（浮层挂在 body 上，不随视图隐藏，切页时要显式收掉） */
+  Charts.hideTip = hideTip;
+
   // 挂载到全局，供 app.js 使用
   window.Charts = Charts;
 })();

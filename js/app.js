@@ -8,7 +8,7 @@
 
 var $ = function (id) { return document.getElementById(id); };
 
-var VIEW_TITLES = { record: '记账', stats: '统计', budget: '预算', diet: '饮食', manage: '管理' };
+var VIEW_TITLES = { record: '记账', stats: '统计', budget: '预算', diet: '饮食', life: '生活', manage: '管理' };
 var WEEKS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
 var data = null;              // Store 数据缓存
@@ -110,29 +110,63 @@ function shiftYm(ym, delta) {
 
 /* ================= 视图切换 ================= */
 
-var VIEW_ORDER = ['record', 'stats', 'budget', 'diet', 'manage'];
+var VIEW_ORDER = ['record', 'stats', 'budget', 'diet', 'life', 'manage'];
 var viewScrollTop = {};        // 每个页签记住自己的滚动位置，切回时恢复
+var viewFadeTimer = 0;
+
+/** 滚动位置的记忆键：生活页按细分段（days/vocab）各记各的 */
+function scrollKeyOf(view) {
+  return (view === 'life' && window.LifeUI) ? 'life:' + LifeUI.currentSeg() : view;
+}
+
+/**
+ * 入场：从略小淡入——朝结果稍微「长」一点，比单纯插值有方向感。
+ * 不做横向位移：5 个页签是平级关系，位移会暗示一条不存在的空间顺序；
+ * 真正的横向方向性已经由底栏玻璃块的随手拖动提供，两套隐喻并存反而混乱。
+ */
+function swapViewIn(incoming) {
+  if (Spring.reduced) return;
+  incoming.style.transition = 'none';
+  incoming.style.opacity = '0';
+  incoming.style.transform = 'scale(0.985)';
+  void incoming.offsetWidth;                     // 强制重排：先把起始帧钉住再放行
+  incoming.style.transition = 'opacity 190ms ease-out, transform 250ms cubic-bezier(0.22, 1, 0.36, 1)';
+  incoming.style.opacity = '1';
+  incoming.style.transform = 'scale(1)';
+}
+
+function resetViewStyles(el) {
+  if (!el || !el.style) return;
+  el.style.transition = '';
+  el.style.opacity = '';
+  el.style.transform = '';
+}
 
 function switchView(view) {
-  if (currentView === 'stats' && view !== 'stats') Charts.destroyAll();
-
   var main = $('app-main');
-  if (main) viewScrollTop[currentView] = main.scrollTop;   // 记住离开时的位置
+  if (main) viewScrollTop[scrollKeyOf(currentView)] = main.scrollTop;   // 记住离开时的位置
 
-  var prevIdx = VIEW_ORDER.indexOf(currentView);
   var nextIdx = VIEW_ORDER.indexOf(view);
-  currentView = view;
-
-  var views = document.querySelectorAll('.view');
-  for (var i = 0; i < views.length; i++) views[i].classList.add('hidden');
   var incoming = $('view-' + view);
+  if (!incoming) return;
+  var outgoing = (view === currentView) ? null : $('view-' + currentView);
+
+  // 离开统计页：数据浮层挂在 body 上、不随视图隐藏，得显式收掉。
+  // 图表本身留到重新进入时再销毁——否则退场动画会演出「一片空白画布」。
+  // 重新进入时 renderStats 会重挂全部图表，每个 canvas 的旧实例在 mount 里就销毁了，不会漏。
+  if (outgoing === $('view-stats') && Charts.hideTip) Charts.hideTip();
+
+  currentView = view;
+  incoming.classList.remove('view-fwd', 'view-back');   // 清掉旧的位移入场类
   incoming.classList.remove('hidden');
-  // 方向感过渡：沿页签顺序前进 / 后退（先清类再强制重排，保证动画重新触发）
-  incoming.classList.remove('view-fwd', 'view-back');
-  if (nextIdx !== prevIdx) {
-    void incoming.offsetWidth;
-    incoming.classList.add(nextIdx > prevIdx ? 'view-fwd' : 'view-back');
+
+  clearTimeout(viewFadeTimer);
+  if (outgoing) {                                 // 出场与入场同时进行（进出同一条路径）
+    outgoing.style.transition = 'opacity 150ms ease-in';
+    outgoing.style.opacity = '0';
+    outgoing.style.transform = 'scale(0.99)';
   }
+  swapViewIn(incoming);
 
   var tabs = document.querySelectorAll('#tab-bar .tab');
   for (var j = 0; j < tabs.length; j++) {
@@ -143,15 +177,28 @@ function switchView(view) {
   if (bar && nextIdx >= 0) bar.style.setProperty('--tab-index', String(nextIdx));
 
   $('page-title').textContent = VIEW_TITLES[view];
-  $('month-nav').classList.toggle('hidden', view === 'manage' || view === 'diet');
+  $('month-nav').classList.toggle('hidden', view === 'manage' || view === 'diet' || view === 'life');
 
   if (view === 'record') { renderQuickCategories(); renderRecordList(); }
-  else if (view === 'stats') renderStats();
+  else if (view === 'stats') { Charts.destroyAll(); renderStats(); }
   else if (view === 'budget') renderBudget();
   else if (view === 'diet') DietUI.render();
+  else if (view === 'life') LifeUI.render();
   else if (view === 'manage') { renderThemeToggle(); renderAccentToggle(); renderEncRow(); renderCategoryManage(); renderBackupHint(); }
 
-  if (main) main.scrollTop = viewScrollTop[view] || 0;     // 恢复该页上次滚动位置
+  if (main) main.scrollTop = viewScrollTop[scrollKeyOf(view)] || 0;     // 恢复该页上次滚动位置
+
+  // 退场走完再真正隐藏。收敛成「除入场页外全部隐藏」而不是记住某个元素，
+  // 这样快速连点页签不会留下半透明的幽灵页。
+  viewFadeTimer = setTimeout(function () {
+    var views = document.querySelectorAll('.view');
+    for (var i = 0; i < views.length; i++) {
+      if (views[i] === incoming) continue;
+      views[i].classList.add('hidden');
+      resetViewStyles(views[i]);
+    }
+    resetViewStyles(incoming);
+  }, Spring.reduced ? 0 : 300);
 }
 
 /* ================= 月份导航 ================= */
@@ -321,7 +368,7 @@ function openEncModal() {
   $('enc-modal-warn').textContent = on ? '' : '请确认你已记住当前密码，并已做好备份。';
   $('enc-confirm-btn').textContent = on ? '关闭加密' : '开启加密';
   $('enc-pw-input').value = '';
-  $('modal-enc').classList.remove('hidden');
+  openModal($('modal-enc'));
   $('enc-pw-input').focus();
 }
 
@@ -342,7 +389,7 @@ function encConfirm() {
     })
     .then(function () {
       btn.disabled = false;
-      $('modal-enc').classList.add('hidden');
+      closeModal($('modal-enc'));
       renderEncRow();
       toast(wasOn ? '已关闭加密，数据恢复明文 ✓' : '已开启加密 ✓ 下次打开需解锁');
     })
@@ -391,51 +438,152 @@ function renderCategoryGrid(container, kind, selectedId) {
   container.innerHTML = html;
 }
 
+/* ---------- 快速记账：统一输入 + 频率分类 chips ---------- */
+
+var pendingAmount = null;      // 一句话解析出的金额（纯数字输入时不经由它）
+var quickCatsExpanded = false; // 分类区：false = 常用 chips，true = 全量
+var parseTimer = 0;
+
+/** 纯数字（可带两位小数）→ 金额直录模式；其余走 NLP */
+function isAmountText(s) { return /^[0-9]+([.][0-9]{1,2})?$/.test(s); }
+
+/** 日期 chip 的友好标签：今天 / 昨天 / M月D日 */
+function updateQuickDateLabel() {
+  var v = $('quick-date').value;
+  var el = $('quick-date-label');
+  if (!v) { el.textContent = '今天'; return; }
+  var today = Store.todayStr();
+  if (v === today) { el.textContent = '今天'; return; }
+  var t = new Date(); t.setDate(t.getDate() - 1);
+  if (v === dayStr(t)) { el.textContent = '昨天'; return; }
+  el.textContent = parseInt(v.slice(5, 7), 10) + '月' + parseInt(v.slice(8, 10), 10) + '日';
+}
+
+/**
+ * 统一输入的实时解析：纯数字 → 金额直录；成句 → NLP 填表并就地回显识别结果。
+ * 识别只填「待确认」状态，用户核对 chips 后点「记一笔」提交——与旧智能记账的
+ * 两段式确认一致，只是不再需要单独的解析按钮。
+ */
+function runQuickParse(immediate) {
+  clearTimeout(parseTimer);
+  var work = function () {
+    var text = $('quick-input').value.trim();
+    var line = $('quick-parse');
+    if (!text || isAmountText(text)) {
+      if (isAmountText(text)) pendingAmount = parseFloat(text);
+      line.classList.add('hidden');
+      return;
+    }
+    var res = NLP.parse(text, Store.getCategories());
+    if (!res.ok) {
+      pendingAmount = null;
+      line.textContent = '没认出金额，试试「打车23块」；或直接输入数字。';
+      line.classList.remove('hidden');
+      return;
+    }
+    pendingAmount = res.amount;
+    // 语义指向收入/支出时自动切换类型（setQuickType 会重选第一个分类）
+    if (res.suggestedType === 'income' && quickType !== 'income') setQuickType('income');
+    else if (res.suggestedType === 'expense' && quickType !== 'expense') setQuickType('expense');
+    // 分类：解析结果属于当前类型时才采用
+    if (res.categoryId) {
+      var cats = Store.getCategories(quickType);
+      for (var i = 0; i < cats.length; i++) {
+        if (cats[i].id === res.categoryId) { quickCat = res.categoryId; renderQuickCategories(); break; }
+      }
+    }
+    if (res.date) { $('quick-date').value = res.date; updateQuickDateLabel(); }
+    if (res.note) $('quick-note').value = res.note;
+    var parts = ['已识别：' + f(res.amount) + ' 元'];
+    var cat = null;
+    var all = Store.getCategories(quickType);
+    for (var k = 0; k < all.length; k++) if (all[k].id === quickCat) { cat = all[k]; break; }
+    if (cat) parts.push(cat.name);
+    if (res.date) parts.push(res.date === Store.todayStr() ? '今天' :
+      parseInt(res.date.slice(5, 7), 10) + '月' + parseInt(res.date.slice(8, 10), 10) + '日');
+    if (res.note) parts.push('备注 ' + res.note);
+    line.textContent = parts.join(' · ');
+    line.classList.remove('hidden');
+  };
+  if (immediate) work();
+  else parseTimer = setTimeout(work, 250);
+}
+
 function renderQuickCategories() {
-  renderCategoryGrid($('quick-categories'), quickType, quickCat);
+  var box = $('quick-cats');
+  var cats = Store.getCategories(quickType);
+  if (!cats.length) { box.innerHTML = ''; return; }
+
+  if (quickCatsExpanded) {
+    // 全量：沿用九宫格 + 末尾一个收起 chip
+    var grid = document.createElement('div');
+    grid.className = 'category-grid';
+    renderCategoryGrid(grid, quickType, quickCat);
+    box.innerHTML = '';
+    box.appendChild(grid);
+    var less = document.createElement('button');
+    less.type = 'button';
+    less.className = 'cat-chip cat-chip-more';
+    less.setAttribute('data-act', 'collapse');
+    less.innerHTML = '收起 <svg class="ic ic-xs"><use href="#i-chevron-right"></use></svg>';
+    less.querySelector('svg').style.transform = 'rotate(90deg)';
+    box.appendChild(less);
+    return;
+  }
+
+  // 常用：按全部账单里的使用次数排序（新分类排后面），取前 5；
+  // 当前选中的不在其中时前置，保证选中态始终可见
+  var freq = {};
+  var recs = Store.getRecords();
+  for (var i = 0; i < recs.length; i++) {
+    var id = recs[i].categoryId;
+    if (id) freq[id] = (freq[id] || 0) + 1;
+  }
+  var sorted = cats.slice().sort(function (a, b) {
+    var d = (freq[b.id] || 0) - (freq[a.id] || 0);
+    return d !== 0 ? d : cats.indexOf(a) - cats.indexOf(b);
+  });
+  var top = sorted.slice(0, 5);
+  var hasSel = false;
+  for (var j = 0; j < top.length; j++) if (top[j].id === quickCat) { hasSel = true; break; }
+  if (!hasSel) {
+    for (var m = 0; m < cats.length; m++) {
+      if (cats[m].id === quickCat) { top.unshift(cats[m]); top.pop(); break; }
+    }
+  }
+
+  var html = '';
+  for (var n = 0; n < top.length; n++) {
+    var c = top[n];
+    html += '<button type="button" class="cat-chip' + (c.id === quickCat ? ' selected' : '') +
+      '" data-id="' + esc(c.id) + '">' + catIconHTML(c, 'cat-chip-ic') +
+      '<span class="cat-chip-name">' + esc(c.name) + '</span></button>';
+  }
+  html += '<button type="button" class="cat-chip cat-chip-more" data-act="expand">全部 ' + cats.length +
+    ' <svg class="ic ic-xs"><use href="#i-chevron-right"></use></svg></button>';
+  box.innerHTML = html;
 }
 
 function quickSave() {
   var cats = Store.getCategories(quickType);
   if (!cats.length) { toast('请先到「管理」页添加分类'); return; }
-  var amount = parseFloat($('quick-amount').value);
+  var raw = $('quick-input').value.trim();
+  var amount = isAmountText(raw) ? parseFloat(raw) : pendingAmount;
   if (!isFinite(amount) || amount <= 0) { toast('请输入正确的金额'); return; }
   var date = $('quick-date').value || Store.todayStr();
   var note = $('quick-note').value;
   try {
     Store.addRecord({ type: quickType, amount: amount, categoryId: quickCat || cats[0].id, date: date, note: note });
   } catch (e) { toast(e.message); return; }
-  $('quick-amount').value = '';
+  $('quick-input').value = '';
   $('quick-note').value = '';
+  pendingAmount = null;
+  $('quick-parse').classList.add('hidden');
   successFlash(quickType === 'income' ? '收入已记录' : '已记一笔');
   renderRecordList();
+  renderQuickCategories();          // 刚记的分类使用次数变了，常用排序随之更新
   refreshBanner();
   checkReminders();
-}
-
-/* ---------- 智能记账 ---------- */
-
-function smartParse() {
-  var text = $('smart-input').value;
-  var res = NLP.parse(text, Store.getCategories());
-  if (!res.ok) { toast('没认出金额，试试「打车23块」'); return; }
-
-  // 语义指向收入/支出时自动切换类型
-  if (res.suggestedType === 'income' && quickType !== 'income') setQuickType('income');
-  else if (res.suggestedType === 'expense' && quickType !== 'expense') setQuickType('expense');
-
-  // 分类：解析结果属于当前类型时才采用
-  if (res.categoryId) {
-    var cats = Store.getCategories(quickType);
-    var found = false;
-    for (var i = 0; i < cats.length; i++) if (cats[i].id === res.categoryId) { found = true; break; }
-    if (found) { quickCat = res.categoryId; renderQuickCategories(); }
-  }
-  if (res.date) $('quick-date').value = res.date;
-  $('quick-amount').value = String(res.amount);
-  if (res.note) $('quick-note').value = res.note;
-  $('smart-input').value = '';
-  toast('已识别 ¥' + f(res.amount) + '，确认后点「记一笔」');
 }
 
 /* ---------- 英雄卡：本月支出一眼可见 ---------- *//* 结构：大数字（含环比）+ 收入/结余/笔数 + 近 7 天迷你柱 + 预算进度
@@ -941,7 +1089,7 @@ function openCatBudgetModal(catId) {
   renderCatBudgetPicker(cats, catId);
   $('catbudget-input').value = map[catId] != null ? String(map[catId]) : '';
   $('catbudget-clear-btn').classList.toggle('hidden', map[catId] == null);
-  $('modal-catbudget').classList.remove('hidden');
+  openModal($('modal-catbudget'));
 }
 
 /** 弹窗里切换分类：同步预填该分类已有的预算 */
@@ -970,7 +1118,7 @@ function catBudgetSave() {
       toast('分类预算已保存 ✓');
     }
   } catch (e) { toast(e.message); return; }
-  $('modal-catbudget').classList.add('hidden');
+  closeModal($('modal-catbudget'));
   renderCategoryBudgets();
 }
 
@@ -1014,23 +1162,49 @@ function refreshBanner() {
   }
 }
 
-/** 晚间未记账提醒（本地应用无推送通道，打开页面时提示） */
+/**
+ * 打开时提醒（本地应用无推送通道，打开页面时提示）。优先级：
+ * 1. 今天的日子（生日 / 纪念日 / 考试，全天可见）
+ * 2. 晚 8 点后：还没记账 / 还没打卡（合并成一条）
+ * 生活 tab 的角标也在这里顺带刷新。
+ */
 function checkReminders() {
   var info = $('info-banner');
   var today = Store.todayStr();
-  var records = Store.getRecords();
-  var hasToday = false;
-  for (var i = 0; i < records.length; i++) {
-    if (records[i].date === today) { hasToday = true; break; }
-  }
   var hour = new Date().getHours();
-  if (hour >= 20 && !hasToday) {
+  var msg = '';
+
+  if (window.Days) {
+    var todays = Days.todayEvents(today);
+    if (todays.length) {
+      msg = '今天是「' + todays[0].title + '」' +
+        (todays[0].repeat === 'yearly' ? '，纪念日快乐！' : '，别忘啦！');
+    }
+  }
+
+  if (!msg && hour >= 20) {
+    var parts = [];
+    var records = Store.getRecords();
+    var hasToday = false;
+    for (var i = 0; i < records.length; i++) {
+      if (records[i].date === today) { hasToday = true; break; }
+    }
+    if (!hasToday) parts.push('记账');
+    if (window.Days && Days.uncheckedHabits(today).length) parts.push('打卡');
+    if (parts.length) msg = '今天还没有' + parts.join('、') + '哦，花点时间完成吧~';
+  }
+
+  if (msg) {
     info.className = 'banner banner-info';
-    info.innerHTML = bannerHTML('calendar', '今天还没有记账哦，花销别忘啦~');
+    info.innerHTML = bannerHTML('calendar', msg);
   } else {
     info.className = 'banner hidden';
   }
+  if (window.LifeUI) LifeUI.refreshBadge();
 }
+
+/** 日子 / 打卡数据变化后由 days-ui.js 调用：横幅与角标同步 */
+window.refreshReminders = function () { refreshBanner(); checkReminders(); };
 
 /** 备份超期提醒（管理页） */
 function renderBackupHint() {
@@ -1087,7 +1261,7 @@ function openCategoryModal(cat) {
   }
   $('category-name-input').value = cat ? cat.name : '';
   $('category-icon-input').value = cat ? cat.icon : '';
-  $('modal-category').classList.remove('hidden');
+  openModal($('modal-category'));
   $('category-name-input').focus();
 }
 
@@ -1104,7 +1278,7 @@ function categorySave() {
       }
     }
   } catch (e) { toast(e.message); return; }
-  $('modal-category').classList.add('hidden');
+  closeModal($('modal-category'));
   data = Store.load();
   renderCategoryManage();
   renderQuickCategories();
@@ -1137,7 +1311,7 @@ function openRecordModal(id) {
   setEditType(r.type || 'expense');
   renderEditItems(r.items || []);
   setItemsExpanded(false);                 // 明细默认收起成一行摘要，避免弹窗一开就占满屏
-  $('modal-record').classList.remove('hidden');
+  openModal($('modal-record'));
 }
 
 /* ---------- 商品明细编辑（编辑弹窗内） ---------- */
@@ -1269,7 +1443,7 @@ function editSave() {
       items: collectItems()
     });
   } catch (e) { toast(e.message); return; }
-  $('modal-record').classList.add('hidden');
+  closeModal($('modal-record'));
   toast('已保存 ✓');
   renderRecordList();
   refreshBanner();
@@ -1280,7 +1454,7 @@ function editDelete() {
   if (!editingRecordId) return;
   if (!confirm('确定删除这条记录吗？')) return;
   Store.deleteRecord(editingRecordId);
-  $('modal-record').classList.add('hidden');
+  closeModal($('modal-record'));
   toast('已删除');
   renderRecordList();
   refreshBanner();
@@ -1322,40 +1496,152 @@ function importJSON(file) {
 
 /* ================= 事件绑定与启动 ================= */
 
+/* ================= 底部抽屉：弹簧入场 / 退场 / 下拉关闭 =================
+   原来的入场是 CSS 关键帧、退场是 display:none 硬切（有来无回）。现在进出走同一套弹簧、
+   同一条路径，退场带「消解」——位移、透明度、遮罩同步变，材质是化开的而非凭空消失。 */
+
 /**
- * 抽屉把手下拉关闭：按住把手往下拖，超过 80px 松手即关闭，否则弹回原位。
+ * 抽屉当前呈现位置（px，向下为正）。手势 / 入场 / 退场共用这一份状态，
+ * 所以任何时刻都能从屏幕上的真实位置接续，不会跳变。
+ * 挂在 DOM 元素上是刻意的：一个抽屉只可能有一处这个状态。
+ */
+function drawerY(body) { return body._dy || 0; }
+
+function drawerRender(body, mask, y, H) {
+  body._dy = y;
+  body.style.transform = y ? 'translateY(' + y + 'px)' : '';
+  var t = Math.min(1, Math.abs(y) / (H || 1));
+  body.style.opacity = t > 0.02 ? String(1 - t * 0.32) : '';
+  if (mask) mask.style.opacity = t > 0.02 ? String(1 - t * 0.9) : '';
+}
+
+function drawerClear(body, mask) {
+  body._dy = 0;
+  body.style.transform = '';
+  body.style.opacity = '';
+  body.style.transition = '';
+  if (mask) mask.style.opacity = '';
+}
+
+/** 弹簧驱动抽屉到 target（0 = 完全展开，H = 退场到底），可带初始速度。
+    运行中的弹簧挂在 modal._axis 上——打开 / 关闭 / 下拉三个入口共用同一份，
+    谁要接管先把旧的杀掉，否则两套弹簧会抢同一个 transform。 */
+function drawerSpringTo(modal, target, velocity, onDone) {
+  var body = modal.querySelector('.modal-body');
+  var mask = modal.querySelector('.modal-mask');
+  var H = body._h;
+  if (modal._axis) modal._axis.kill();
+  body.style.transition = 'none';                // 全程由弹簧写，不留给 CSS 过渡
+  var axis = new Spring.Axis({
+    from: drawerY(body),
+    damping: Spring.PRESET.drawer.damping,       // 0.8 / 0.3：抽屉带惯性，允许轻微越界
+    response: Spring.PRESET.drawer.response,
+    velocity: velocity || 0,
+    onUpdate: function (y) { drawerRender(body, mask, y, H); }
+  });
+  modal._axis = axis;
+  axis.onSettle = function () {
+    if (modal._axis === axis) modal._axis = null;
+    if (onDone) onDone();
+  };
+  axis.set(target);
+  return axis;
+}
+
+/** 所有打开点统一走这里，入场才有动画（原来是各处 remove('hidden')） */
+function openModal(modal) {
+  if (!modal || !modal.classList.contains('hidden')) return;
+  var body = modal.querySelector('.modal-body');
+  var mask = modal.querySelector('.modal-mask');
+  modal.classList.remove('hidden');
+  delete modal.dataset.closing;
+  if (!body) return;
+  body._h = body.offsetHeight || 400;
+  if (Spring.reduced) { drawerClear(body, mask); return; }   // 减弱动态：直接呈现
+  drawerRender(body, mask, body._h, body._h);                // 先落到屏外，再弹上来
+  drawerSpringTo(modal, 0, 0, function () { drawerClear(body, mask); });
+}
+
+/** 所有关闭点统一走这里，退场才有动画。已经在退场中的不重复启动。 */
+function closeModal(modal) {
+  if (!modal || modal.classList.contains('hidden') || modal.dataset.closing) return;
+  var body = modal.querySelector('.modal-body');
+  var mask = modal.querySelector('.modal-mask');
+  if (!body || Spring.reduced) { modal.classList.add('hidden'); return; }
+  modal.dataset.closing = '1';
+  body._h = body.offsetHeight || 400;
+  drawerSpringTo(modal, body._h, 0, function () {
+    modal.classList.add('hidden');
+    drawerClear(body, mask);
+    delete modal.dataset.closing;
+  });
+}
+
+/**
+ * 抽屉把手下拉关闭。
+ * 判定用速度而不是位置：一记轻快的下甩该关（哪怕只拖了 40px），
+ * 慢慢地拖很远也可以不关，还能中途甩回去。退场走与入场同一条弹簧路径。
  * 只挂在把手上（不劫持弹窗内容），所以不影响内部滚动与输入。
  */
 function bindModalDrag(modal) {
   var body = modal.querySelector('.modal-body');
   var handle = modal.querySelector('.modal-handle');
   if (!body || !handle) return;
-  var startY = 0;
-  var dy = 0;
-  var dragging = false;
+
+  var tracker = new Spring.Tracker();
+  var dragging = false, startY = 0, y0 = 0, pid = -1;
 
   handle.addEventListener('pointerdown', function (e) {
+    if (e.isPrimary === false || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    if (modal._axis) { modal._axis.kill(); modal._axis = null; }   // 抓住正在关闭 / 弹回的抽屉：可反悔
+    delete modal.dataset.closing;                // 本次手势接管了去留，退场标记作废
     dragging = true;
+    pid = e.pointerId;
     startY = e.clientY;
-    dy = 0;
+    y0 = drawerY(body);
+    body._h = body.offsetHeight || 400;
+    tracker.reset();
+    tracker.push(y0, performance.now());
     body.style.transition = 'none';
     try { handle.setPointerCapture(e.pointerId); } catch (err) { /* 忽略 */ }
   });
+
   handle.addEventListener('pointermove', function (e) {
-    if (!dragging) return;
-    dy = Math.max(0, e.clientY - startY);
-    body.style.transform = 'translateY(' + dy + 'px)';
+    if (!dragging || e.pointerId !== pid) return;
+    var H = body._h;
+    var y = y0 + (e.clientY - startY);
+    if (y < 0) y = 0;                            // 上滑不响应：抽屉没有「更大的状态」
+    else if (y > H) y = H + Spring.rubberband(y - H, H);   // 软边界，别硬顶
+    tracker.push(y, performance.now());
+    drawerRender(body, modal.querySelector('.modal-mask'), y, H);
   });
-  function endDrag() {
-    if (!dragging) return;
+
+  function release(e) {
+    if (!dragging || e.pointerId !== pid) return;
     dragging = false;
-    body.style.transition = '';              // 交还给 CSS 的过渡（弹回）
-    body.style.transform = '';
-    if (dy > 80) modal.classList.add('hidden');
-    dy = 0;
+    var H = body._h;
+    var y = drawerY(body);
+    var v = tracker.velocity();                  // px/s，向下为正
+    // 速度优先：一记轻快的下甩该关；已经在往回甩的则不关
+    var dismiss = v > 300 || (v > -300 && y > H * 0.3);
+
+    if (dismiss) {
+      modal.dataset.closing = '1';
+      Spring.haptic(12);                         // 提交动作比吸附重一点（因果匹配）
+      drawerSpringTo(modal, H, v, function () {
+        modal.classList.add('hidden');
+        drawerClear(body, modal.querySelector('.modal-mask'));
+        delete modal.dataset.closing;
+      });
+    } else {
+      drawerSpringTo(modal, 0, v, function () {
+        drawerClear(body, modal.querySelector('.modal-mask'));
+      });
+    }
   }
-  handle.addEventListener('pointerup', endDrag);
-  handle.addEventListener('pointercancel', endDrag);
+
+  handle.addEventListener('pointerup', release);
+  handle.addEventListener('pointercancel', release);
 }
 
 function bindEvents() {
@@ -1369,12 +1655,20 @@ function bindEvents() {
   $('month-prev').addEventListener('click', function () { shiftMonth(-1); });
   $('month-next').addEventListener('click', function () { shiftMonth(1); });
 
-  // 记一笔
+  // 记一笔（统一输入：纯数字 = 金额，成句 = 实时解析）
   $('quick-save-btn').addEventListener('click', quickSave);
-  $('quick-amount').addEventListener('keydown', function (e) { if (e.key === 'Enter') quickSave(); });
+  $('quick-input').addEventListener('input', function () { runQuickParse(false); });
+  $('quick-input').addEventListener('keydown', function (e) { if (e.key === 'Enter') { clearTimeout(parseTimer); quickSave(); } });
   $('quick-note').addEventListener('keydown', function (e) { if (e.key === 'Enter') quickSave(); });
-  $('quick-categories').addEventListener('click', function (e) {
-    var btn = e.target.closest('.cat-item');
+  $('quick-date').addEventListener('change', updateQuickDateLabel);
+  $('quick-cats').addEventListener('click', function (e) {
+    var more = e.target.closest('.cat-chip-more');
+    if (more) {
+      quickCatsExpanded = more.getAttribute('data-act') === 'expand';
+      renderQuickCategories();
+      return;
+    }
+    var btn = e.target.closest('.cat-chip[data-id]');
     if (!btn) return;
     quickCat = btn.getAttribute('data-id');
     renderQuickCategories();
@@ -1383,10 +1677,6 @@ function bindEvents() {
     var btn = e.target.closest('.type-btn');
     if (btn) setQuickType(btn.getAttribute('data-type'));
   });
-
-  // 智能记账
-  $('smart-parse-btn').addEventListener('click', smartParse);
-  $('smart-input').addEventListener('keydown', function (e) { if (e.key === 'Enter') smartParse(); });
 
   // 购物清单导入
   $('toggle-shopping-btn').addEventListener('click', function () { toggleShoppingCard(); });
@@ -1438,12 +1728,12 @@ function bindEvents() {
   $('catbudget-clear-btn').addEventListener('click', function () {
     if (!editingCatBudgetId) return;
     try { Store.setCategoryBudget(editingCatBudgetId, null); } catch (err) { toast(err.message); return; }
-    $('modal-catbudget').classList.add('hidden');
+    closeModal($('modal-catbudget'));
     toast('已清除该分类预算');
     renderCategoryBudgets();
   });
   $('catbudget-cancel-btn').addEventListener('click', function () {
-    $('modal-catbudget').classList.add('hidden');
+    closeModal($('modal-catbudget'));
   });
 
   // 账本加密：开关按钮 + 设置弹窗
@@ -1451,7 +1741,7 @@ function bindEvents() {
   $('enc-confirm-btn').addEventListener('click', encConfirm);
   $('enc-pw-input').addEventListener('keydown', function (e) { if (e.key === 'Enter') encConfirm(); });
   $('enc-cancel-btn').addEventListener('click', function () {
-    $('modal-enc').classList.add('hidden');
+    closeModal($('modal-enc'));
   });
 
   // 主题：明暗
@@ -1516,7 +1806,7 @@ function bindEvents() {
 
   // 编辑记录弹窗
   $('edit-save-btn').addEventListener('click', editSave);
-  $('edit-cancel-btn').addEventListener('click', function () { $('modal-record').classList.add('hidden'); });
+  $('edit-cancel-btn').addEventListener('click', function () { closeModal($('modal-record')); });
   $('edit-delete-btn').addEventListener('click', editDelete);
   $('edit-type-toggle').addEventListener('click', function (e) {
     var btn = e.target.closest('.type-btn');
@@ -1548,7 +1838,7 @@ function bindEvents() {
     if (!btn) return;
     var act = btn.getAttribute('data-empty-act');
     if (act === 'focus-amount') {
-      $('quick-amount').focus();
+      $('quick-input').focus();
     } else if (act === 'clear-search') {
       $('search-input').value = '';
       renderRecordList();
@@ -1560,10 +1850,10 @@ function bindEvents() {
   for (var mi = 0; mi < modals.length; mi++) bindModalDrag(modals[mi]);
 
   // 分类弹窗
-  $('category-save-btn').addEventListener('click', categorySave);  $('category-cancel-btn').addEventListener('click', function () { $('modal-category').classList.add('hidden'); });
+  $('category-save-btn').addEventListener('click', categorySave);  $('category-cancel-btn').addEventListener('click', function () { closeModal($('modal-category')); });
 
   // 修改密码弹窗
-  $('pw-cancel-btn').addEventListener('click', function () { $('modal-password').classList.add('hidden'); });
+  $('pw-cancel-btn').addEventListener('click', function () { closeModal($('modal-password')); });
   $('pw-save-btn').addEventListener('click', function () {
     var newPw = $('pw-new').value;
     if (newPw !== $('pw-new2').value) { toast('两次输入的新密码不一致'); return; }
@@ -1583,7 +1873,7 @@ function bindEvents() {
       .then(function () { return Auth.replacePassword(newPw); })
       .then(function () {
         $('pw-save-btn').disabled = false;
-        $('modal-password').classList.add('hidden');
+        closeModal($('modal-password'));
         toast('密码已修改 ✓');
       })
       .catch(function (e) {
@@ -1600,7 +1890,7 @@ function bindEvents() {
   var masks = document.querySelectorAll('.modal-mask');
   for (var k = 0; k < masks.length; k++) {
     masks[k].addEventListener('click', function () {
-      this.parentNode.classList.add('hidden');
+      closeModal(this.parentNode);
     });
   }
 
@@ -1622,7 +1912,7 @@ function bindEvents() {
     $('pw-old').value = '';
     $('pw-new').value = '';
     $('pw-new2').value = '';
-    $('modal-password').classList.remove('hidden');
+    openModal($('modal-password'));
   });
 }
 
@@ -1769,17 +2059,17 @@ function handleLaunchParams() {
   }
 
   if (shared) {
-    // 分享文本：塞进智能记账，解析成功即回填表单，用户确认后点「记一笔」
+    // 分享文本：塞进统一输入，实时解析回显识别结果，用户确认后点「记一笔」
     switchView('record');
     clearQuery();
-    $('smart-input').value = shared.slice(0, 60);
-    smartParse();
+    $('quick-input').value = shared.slice(0, 60);
+    runQuickParse(true);
     return;
   }
   if (action === 'add') {
     switchView('record');
     clearQuery();
-    $('quick-amount').focus();
+    $('quick-input').focus();
     return;
   }
   if (action === 'meal') {
@@ -1789,8 +2079,13 @@ function handleLaunchParams() {
     if (mealInput) mealInput.focus();
     return;
   }
-  if (['record', 'stats', 'budget', 'diet', 'manage'].indexOf(view) >= 0) {
+  if (['record', 'stats', 'budget', 'diet', 'life', 'manage'].indexOf(view) >= 0) {
     switchView(view);
+    // ?view=life&mod=vocab → 直接落到指定分段（深链 / 桌面快捷方式用）
+    var mod = q.get('mod') || '';
+    if (view === 'life' && window.LifeUI && ['days', 'vocab'].indexOf(mod) >= 0) {
+      LifeUI.setSegment(mod);
+    }
     clearQuery();
   } else {
     clearQuery();   // 未知参数同样清掉，保持地址栏干净
@@ -1812,6 +2107,7 @@ function startApp(username) {
   quickCat = cats.length ? cats[0].id : null;
   $('account-name').textContent = username;
   $('quick-date').value = Store.todayStr();
+  updateQuickDateLabel();
   $('search-input').value = '';
   $('search-scope').value = 'month';
   DietUI.reset(); // 重置饮食页浏览状态（日期/选中食物等归位到新账户）
@@ -1833,6 +2129,7 @@ function boot() {
   bindEvents();
   DietUI.init(); // 饮食页事件只绑一次（元素为静态 HTML，与登录状态无关）
   Insights.init(); // 统计页洞察轮播只绑一次
+  if (window.LifeUI) LifeUI.init(); // 生活页（日子/背单词）分段切换与弹窗只绑一次
   registerServiceWorker();
   var user = Auth.currentUser();
   if (user) {

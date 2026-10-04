@@ -92,33 +92,25 @@
         <div class="hero-budget hidden" id="hero-budget"></div>
       </div>
 
+      <!-- 快速记账：统一输入（纯数字 = 金额，成句 = 智能解析），分类按使用频率收敛 -->
       <div class="card" id="quick-add-card">
-        <div class="type-toggle" id="quick-type-toggle">
-          <button type="button" class="type-btn active" data-type="expense">支出</button>
-          <button type="button" class="type-btn" data-type="income">收入</button>
-        </div>
-        <div class="quick-amount-row">
-          <span class="currency">¥</span>
-          <input id="quick-amount" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off">
+        <div class="quick-input-row">
+          <input id="quick-input" type="text" inputmode="text" enterkeyhint="done" placeholder="金额或一句话，如：昨天打车23块" autocomplete="off">
           <button id="quick-save-btn" class="btn-primary">记一笔</button>
         </div>
-        <div class="field-caption">选择分类</div>
-        <div id="quick-categories" class="category-grid"></div>
-        <div class="field-caption">日期与备注</div>
-        <div class="quick-meta-row">
-          <input id="quick-date" type="date">
-          <input id="quick-note" type="text" placeholder="备注（可选）" maxlength="30" autocomplete="off">
+        <div id="quick-parse" class="quick-parse hidden"></div>
+        <div class="quick-controls-row">
+          <div class="type-toggle type-toggle-sm" id="quick-type-toggle">
+            <button type="button" class="type-btn active" data-type="expense">支出</button>
+            <button type="button" class="type-btn" data-type="income">收入</button>
+          </div>
+          <label class="date-chip">
+            <span id="quick-date-label">今天</span>
+            <input id="quick-date" type="date" aria-label="日期">
+          </label>
+          <input id="quick-note" type="text" placeholder="备注" maxlength="30" autocomplete="off">
         </div>
-      </div>
-
-      <!-- 智能记账：一句话解析成多笔 + 购物清单导入入口 -->
-      <div class="card" id="smart-card">
-        <h3 class="card-title">智能记账</h3>
-        <div class="smart-row">
-          <input id="smart-input" type="text" maxlength="60" placeholder="粘贴一句话，如：昨天打车23块" autocomplete="off">
-          <button id="smart-parse-btn" class="btn-secondary btn-sm">解析</button>
-        </div>
-        <p class="hint">自动识别时间、分类和金额，按回车也能解析；识别结果会填进上方表单，确认无误再点「记一笔」。</p>
+        <div id="quick-cats" class="fav-cats"></div>
         <button type="button" id="toggle-shopping-btn" class="row-entry">
           <span class="row-entry-icon"><svg class="ic ic-cat"><use href="#i-cart"></use></svg></span>
           <span class="row-entry-main">
@@ -317,6 +309,50 @@
       </div>
     </section>
 
+    <!-- ============ 生活页（日子 / 背单词 分段切换） ============ -->
+    <section id="view-life" class="view hidden">
+      <!-- 顶部分段切换器：滑动胶囊指示块由 JS 写入 --life-seg（0=日子 1=背单词） -->
+      <div class="life-seg" id="life-seg">
+        <span class="life-seg-indicator" aria-hidden="true"></span>
+        <button type="button" class="life-seg-btn active" data-mod="days"><svg class="ic ic-sm"><use href="#i-calendar-heart"></use></svg>日子</button>
+        <button type="button" class="life-seg-btn" data-mod="vocab"><svg class="ic ic-sm"><use href="#i-graduation-cap"></use></svg>背单词</button>
+      </div>
+
+      <!-- 日子模块：上半屏事件卡片切换器，下半屏打卡计划 -->
+      <div id="life-days" class="life-mod">
+        <div id="day-banner" class="banner banner-info hidden"></div>
+        <div class="day-stage lg-noscrub" id="day-stage">
+          <div class="day-track" id="day-track"></div>
+        </div>
+        <div class="day-dots" id="day-dots"></div>
+        <div id="day-empty" class="empty-tip empty-lg hidden">
+          <span class="empty-art"><svg class="ic"><use href="#i-calendar-heart"></use></svg></span>
+          <p class="empty-title">还没有日子</p>
+          <p class="empty-sub">把重要的考试、生日和纪念日记在这里</p>
+        </div>
+
+        <div class="section-head">
+          <h3 class="section-title">打卡计划</h3>
+          <button id="add-habit-btn" class="btn-secondary btn-sm"><svg class="ic ic-sm"><use href="#i-plus"></use></svg>新增</button>
+        </div>
+        <div id="habit-list"></div>
+        <div id="habit-empty" class="empty-tip empty-icon hidden">
+          <span class="empty-art"><svg class="ic"><use href="#i-check-circle"></use></svg></span>把想坚持的事加进来，每天打一次卡，看连续天数一点点变长
+        </div>
+
+        <button id="add-event-btn" class="btn-secondary day-add-btn"><svg class="ic ic-sm"><use href="#i-plus"></use></svg>新建纪念日 / 倒计时</button>
+      </div>
+
+      <!-- 背单词模块（学习闭环在后续阶段接入，先占位） -->
+      <div id="life-vocab" class="life-mod hidden">
+        <div class="card vocab-placeholder">
+          <span class="empty-art"><svg class="ic"><use href="#i-graduation-cap"></use></svg></span>
+          <p class="empty-title">背单词 · 四六级</p>
+          <p class="empty-sub">每日 50 词 · 例句 · 每日自检与周期测试，即将上线</p>
+        </div>
+      </div>
+    </section>
+
     <!-- ============ 管理页 ============ -->
     <section id="view-manage" class="view hidden">
       <div class="card">
@@ -377,6 +413,7 @@
     <button class="tab" data-view="stats"><svg class="ic tab-icon"><use href="#i-stats"></use></svg><span class="tab-label">统计</span></button>
     <button class="tab" data-view="budget"><svg class="ic tab-icon"><use href="#i-budget"></use></svg><span class="tab-label">预算</span></button>
     <button class="tab" data-view="diet"><svg class="ic tab-icon"><use href="#i-diet"></use></svg><span class="tab-label">饮食</span></button>
+    <button class="tab" data-view="life"><svg class="ic tab-icon"><use href="#i-life"></use></svg><span class="tab-label">生活</span></button>
     <button class="tab" data-view="manage"><svg class="ic tab-icon"><use href="#i-manage"></use></svg><span class="tab-label">管理</span></button>
   </nav>
 </div>
@@ -524,6 +561,81 @@
   </div>
 </div>
 
+<!-- 纪念日/倒计时编辑弹窗 -->
+<div id="modal-day" class="modal hidden">
+  <div class="modal-mask" data-close="1"></div>
+  <div class="modal-body">
+    <span class="modal-handle" aria-hidden="true"></span>
+    <h3 class="modal-title" id="modal-day-title">新建纪念日</h3>
+    <div class="form-row"><label class="form-label">名称</label><input id="day-title-input" type="text" maxlength="20" placeholder="如 四六级考试 / 在一起" autocomplete="off"></div>
+    <div class="form-row"><label class="form-label">日期</label><input id="day-date-input" type="date"></div>
+    <div class="form-row">
+      <label class="form-label">方向</label>
+      <div class="type-toggle" id="day-mode-toggle">
+        <button type="button" class="type-btn active" data-mode="countdown">倒计时</button>
+        <button type="button" class="type-btn" data-mode="countup">累计天数</button>
+      </div>
+    </div>
+    <div class="form-row">
+      <label class="form-label">重复</label>
+      <div class="type-toggle" id="day-repeat-toggle">
+        <button type="button" class="type-btn active" data-repeat="none">单次</button>
+        <button type="button" class="type-btn" data-repeat="yearly">每年</button>
+      </div>
+    </div>
+    <div class="form-row">
+      <label class="form-label">图标与颜色</label>
+      <div class="day-icon-row">
+        <input id="day-icon-input" type="text" maxlength="4" placeholder="如 🎓" autocomplete="off">
+        <div class="chip-row" id="day-color-chips">
+          <button type="button" class="chip chip-color active" data-color=""><span class="chip-dot"></span>主题</button>
+          <button type="button" class="chip chip-color" data-color="#FF7043"><span class="chip-dot" style="--chip-c:#FF7043"></span></button>
+          <button type="button" class="chip chip-color" data-color="#42A5F5"><span class="chip-dot" style="--chip-c:#42A5F5"></span></button>
+          <button type="button" class="chip chip-color" data-color="#AB47BC"><span class="chip-dot" style="--chip-c:#AB47BC"></span></button>
+          <button type="button" class="chip chip-color" data-color="#EF5350"><span class="chip-dot" style="--chip-c:#EF5350"></span></button>
+          <button type="button" class="chip chip-color" data-color="#26A69A"><span class="chip-dot" style="--chip-c:#26A69A"></span></button>
+          <button type="button" class="chip chip-color" data-color="#F4B400"><span class="chip-dot" style="--chip-c:#F4B400"></span></button>
+        </div>
+      </div>
+    </div>
+    <div class="form-row">
+      <label class="form-label">提前提醒</label>
+      <div class="chip-row" id="day-remind-chips">
+        <button type="button" class="chip active" data-remind="0">当天</button>
+        <button type="button" class="chip" data-remind="1">提前1天</button>
+        <button type="button" class="chip" data-remind="3">提前3天</button>
+        <button type="button" class="chip" data-remind="7">提前7天</button>
+      </div>
+    </div>
+    <div class="form-row"><label class="form-label">备注</label><input id="day-note-input" type="text" maxlength="30" placeholder="可选" autocomplete="off"></div>
+    <div class="modal-actions">
+      <button id="day-delete-btn" class="btn-danger hidden">删除</button>
+      <span class="modal-actions-right">
+        <button id="day-cancel-btn" class="btn-secondary">取消</button>
+        <button id="day-save-btn" class="btn-primary">保存</button>
+      </span>
+    </div>
+  </div>
+</div>
+
+<!-- 打卡计划编辑弹窗 -->
+<div id="modal-habit" class="modal hidden">
+  <div class="modal-mask" data-close="1"></div>
+  <div class="modal-body">
+    <span class="modal-handle" aria-hidden="true"></span>
+    <h3 class="modal-title" id="modal-habit-title">新增打卡计划</h3>
+    <div class="form-row"><label class="form-label">名称</label><input id="habit-title-input" type="text" maxlength="12" placeholder="如 每天背单词" autocomplete="off"></div>
+    <div class="form-row"><label class="form-label">图标</label><input id="habit-icon-input" type="text" maxlength="4" placeholder="一个 emoji，如 📖" autocomplete="off"></div>
+    <div class="modal-actions">
+      <button id="habit-delete-btn" class="btn-danger hidden">删除</button>
+      <span class="modal-actions-right">
+        <button id="habit-cancel-btn" class="btn-secondary">取消</button>
+        <button id="habit-save-btn" class="btn-primary">保存</button>
+      </span>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="hidden"></div>
 
 <!-- 操作成功反馈：打勾描线 + 文案（记账 / 记餐 / 导入等保存动作，见 app.js 的 successFlash） -->
@@ -558,6 +670,9 @@
 <script src="js/charts.js"></script>
 <script src="js/insights.js"></script>
 <script src="js/diet-ui.js"></script>
+<script src="js/days.js"></script>
+<script src="js/days-ui.js"></script>
+<script src="js/spring.js"></script>
 <script src="js/liquid-glass.js"></script>
 <script src="js/app.js"></script>
 </body>
