@@ -133,6 +133,17 @@ var Alerts = (function () {
       text: '今天还没有记账，花销别忘啦', go: { view: 'record' } }];
   });
 
+  /** 背单词：今日还有待学任务（白天蓝、晚 8 点后黄） */
+  register('vocab', function () {
+    if (!window.Vocab || !window.VOCAB_DB) return [];
+    var prev = Vocab.todayPreview();
+    if (prev.total === 0) return [];
+    var hour = new Date().getHours();
+    return [{ id: 'vocab-today', level: hour >= 20 ? 'warn' : 'info', icon: 'graduation-cap',
+      text: '今日还有 ' + prev.total + ' 个词待学',
+      go: { view: 'life', mod: 'vocab' } }];
+  });
+
   /** 备份：超过 7 天未导出（黄） */
   register('backup', function () {
     var b = Store.getLastBackupAt();

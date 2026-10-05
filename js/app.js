@@ -2187,6 +2187,7 @@ function boot() {
   Insights.init(); // 统计页洞察轮播只绑一次
   if (window.LifeUI) LifeUI.init(); // 生活页（日子/背单词/饮食）分段切换与弹窗只绑一次
   if (window.HomeUI) HomeUI.init(); // 首页通知中心/入口卡/快捷动作只绑一次
+  if (window.VocabUI) VocabUI.init(); // 背单词学习会话/筛选/设置只绑一次
   registerServiceWorker();
   var user = Auth.currentUser();
   if (user) {

@@ -327,6 +327,8 @@ var LifeUI = (function () {
       renderHabits();
     } else if (currentMod === 'diet' && window.DietUI) {
       DietUI.render();           // 饮食已并入为生活页第 3 分段
+    } else if (currentMod === 'vocab' && window.VocabUI) {
+      VocabUI.render();          // 背单词分段
     }
     refreshBadge();
   }

@@ -4469,3 +4469,200 @@ body[data-mode="dark"] .accent-card[data-accent="sakura"] .accent-preview {
 @media (prefers-reduced-motion: reduce) {
   .confetti { display: none; }
 }
+/* ----------------------------------------------------------------------
+   41. 背单词（今日任务 / 学习会话 / 快速筛选）
+   ---------------------------------------------------------------------- */
+
+.vocab-task-body {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 6px 0 10px;
+}
+.vocab-deck-count { font-size: 12px; color: var(--text-grey); }
+.vocab-exam {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(var(--primary-rgb), 0.12);
+  color: var(--primary-deep);
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.vocab-task-line { font-size: 14px; color: var(--text-sub); margin: 4px 0; }
+.vocab-task-line b { color: var(--text-main); font-variant-numeric: tabular-nums; }
+.vocab-task-btn { margin-top: 10px; }
+
+/* 进度环 */
+.vocab-ring { width: 108px; height: 108px; flex-shrink: 0; }
+.vocab-ring .vr-bg {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 10;
+}
+.vocab-ring .vr-fg {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 10;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 64px 64px;
+  transition: stroke-dasharray 0.5s cubic-bezier(0.3, 0.8, 0.3, 1);
+}
+.vocab-ring .vr-num {
+  font-size: 30px;
+  font-weight: 700;
+  fill: var(--text-main);
+  text-anchor: middle;
+  font-variant-numeric: tabular-nums;
+}
+.vocab-ring .vr-sub { font-size: 12px; fill: var(--text-grey); text-anchor: middle; }
+
+.vocab-quick-row {
+  display: flex;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.vocab-done-tip { color: var(--primary-deep); font-weight: 600; }
+
+/* 设置 */
+.vocab-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.vocab-two-col input { width: 100%; }
+.vocab-settings select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg-input);
+  color: var(--text-main);
+  font-size: 14px;
+}
+
+/* 掌握情况 */
+.vocab-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+.vocab-stat-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 0;
+  border-radius: 12px;
+  background: var(--bg-input);
+}
+.vocab-stat-cell b { font-size: 17px; color: var(--text-main); font-variant-numeric: tabular-nums; }
+.vocab-stat-cell span { font-size: 11px; color: var(--text-grey); }
+
+/* ---- 学习会话 ---- */
+.vocab-session-card { min-height: 60vh; }
+.vocab-session-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.vocab-exit {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  color: var(--text-grey);
+  font-size: 14px;
+  padding: 6px 8px;
+  border-radius: 10px;
+}
+.vocab-exit:active { background: var(--bg-input); }
+.vocab-progress { font-size: 13px; color: var(--text-grey); font-variant-numeric: tabular-nums; }
+.vocab-speak {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(var(--primary-rgb), 0.12);
+  color: var(--primary-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vocab-word-card {
+  text-align: center;
+  padding: 30px 14px 26px;
+  border-radius: var(--radius-card);
+  background: var(--bg-input);
+  box-shadow: inset 0 0 0 1px var(--line);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: pan-y;
+  cursor: pointer;
+}
+.vw-word {
+  font-size: 44px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--text-main);
+  line-height: 1.15;
+  overflow-wrap: break-word;
+}
+.vw-phon { margin-top: 6px; font-size: 16px; color: var(--text-grey); }
+.vw-tap { margin-top: 26px; font-size: 13px; color: var(--text-decor); }
+.vw-zh {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 17px;
+  color: var(--text-main);
+  line-height: 1.6;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.vw-ex { margin-top: 14px; text-align: left; }
+.vw-ex-en { margin: 0; font-size: 14px; color: var(--text-sub); line-height: 1.65; }
+.vw-ex-en b { color: var(--primary-deep); }
+.vw-ex-cn { margin: 4px 0 0; font-size: 13px; color: var(--text-grey); }
+.vw-bookmark {
+  margin-top: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  color: var(--text-grey);
+  font-size: 13px;
+}
+
+/* 评分按钮：三档颜色情绪（红=重学 黄=不确定 绿=会） */
+.vocab-grade-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+.grade-btn {
+  padding: 13px 0;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  background: var(--bg-input);
+  color: var(--text-sub);
+  box-shadow: inset 0 0 0 1px var(--line);
+  transition: transform 0.1s;
+}
+.grade-btn:active { transform: scale(0.96); }
+.grade-btn.g0 { color: var(--danger); box-shadow: inset 0 0 0 1.5px rgba(250, 81, 81, 0.45); }
+.grade-btn.g1 { color: #C96D14; box-shadow: inset 0 0 0 1.5px rgba(232, 132, 43, 0.5); }
+.grade-btn.g2 { color: var(--primary-deep); box-shadow: inset 0 0 0 1.5px rgba(var(--primary-rgb), 0.5); }
+
+.vocab-keys { text-align: center; margin: 12px 0 0; }
+.vocab-finish { text-align: center; padding: 30px 0 20px; color: var(--text-grey); }
+.vocab-finish .empty-title { margin: 10px 0 4px; }
+.vocab-finish .btn-primary { margin-top: 18px; }
+.vocab-finish-sub { margin: 0; font-size: 14px; color: var(--text-sub); }

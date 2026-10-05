@@ -865,6 +865,17 @@ var Store = (function () {
         ? Math.floor(Number(v.stats.streak)) : 0;
       out.stats.lastStudyDate = normalizeDateStr(v.stats.lastStudyDate);
     }
+    // 学习会话（中途退出可续）：date + 队列 + 位置，形状不对整体丢弃
+    var sess = v.session;
+    if (sess && typeof sess === 'object' && !Array.isArray(sess) &&
+        typeof sess.date === 'string' && Array.isArray(sess.queue) &&
+        isFinite(Number(sess.pos))) {
+      out.session = {
+        date: sess.date.slice(0, 10),
+        queue: sess.queue.filter(function (n) { return isFinite(Number(n)); }).slice(0, 999),
+        pos: Math.max(0, Math.round(Number(sess.pos)))
+      };
+    }
     return out;
   }
 
@@ -878,7 +889,8 @@ var Store = (function () {
       bookmarks: { cet4: {}, cet6: {} },
       wrong: { cet4: {}, cet6: {} },
       tests: { daily: {}, weekly: {}, monthly: {} },
-      stats: { daily: {}, streak: 0, lastStudyDate: null }
+      stats: { daily: {}, streak: 0, lastStudyDate: null },
+      session: null
     };
   }
 
@@ -2136,6 +2148,134 @@ var Store = (function () {
     return b;
   }
 
+  // ==================== 对外 API：背单词（vocab） ====================
+
+  /**
+   * 背单词数据域，返回深拷贝
+   * @returns {Object} 与 defaultData().vocab 同构（含 session）
+   */
+  function getVocab() {
+    var v = getData().vocab;
+    var out = JSON.parse(JSON.stringify(v));
+    return out;
+  }
+
+  /**
+   * 更新学习设置（白名单字段）
+   * @param {Object} patch 允许键：deck/newPerDay/reviewCap/checkSize/examEventId/autoCheckHabitId
+   */
+  function setVocabSettings(patch) {
+    var p = patch || {};
+    var v = getData().vocab;
+    if (p.deck === 'cet4' || p.deck === 'cet6') v.settings.deck = p.deck;
+    if (isFinite(Number(p.newPerDay))) {
+      v.settings.newPerDay = Math.min(200, Math.max(0, Math.round(Number(p.newPerDay))));
+    }
+    if (isFinite(Number(p.reviewCap))) {
+      v.settings.reviewCap = Math.min(999, Math.max(0, Math.round(Number(p.reviewCap))));
+    }
+    if (isFinite(Number(p.checkSize))) {
+      v.settings.checkSize = Math.min(100, Math.max(5, Math.round(Number(p.checkSize))));
+    }
+    if (p.examEventId === null || typeof p.examEventId === 'string') {
+      v.settings.examEventId = p.examEventId;
+    }
+    if (p.autoCheckHabitId === null || typeof p.autoCheckHabitId === 'string') {
+      v.settings.autoCheckHabitId = p.autoCheckHabitId;
+    }
+    persist();
+  }
+
+  /**
+   * 记一次学习评分（SRS 核心）。
+   * 等级阶梯 INTERVALS[0..7] = [0,1,2,4,7,15,30,60] 天，box≥6 视为已掌握；
+   * 认识 → box+1；模糊 → box-1（不低于 1）；不认识 → 重置 box=1、lapses+1、错词本+1。
+   * 同时累计 stats.daily（新学 n / 复习 r）、连续打卡 streak、lastStudyDate。
+   * @param {string} deck 'cet4' | 'cet6'
+   * @param {number} idx 词表下标
+   * @param {number} grade 0=不认识 1=模糊 2=认识
+   * @param {string} today 'YYYY-MM-DD'
+   * @returns {{box:number, isNew:boolean}}
+   */
+  function vocabGrade(deck, idx, grade, today) {
+    var d = normalizeDateStr(today);
+    if ((deck !== 'cet4' && deck !== 'cet6') || !d) {
+      throw new Error('参数不合法');
+    }
+    var g = Math.round(Number(grade));
+    if (g !== 0 && g !== 1 && g !== 2) {
+      throw new Error('评分不合法');
+    }
+    var v = getData().vocab;
+    var prog = v.progress[deck];
+    var key = String(Math.round(Number(idx)));
+    var prev = prog[key] || null;
+    var box = prev ? (isFinite(prev.b) ? prev.b : 0) : 0;
+    var INTERVALS = [0, 1, 2, 4, 7, 15, 30, 60];
+    if (g === 2) box = Math.min(7, box + 1);
+    else if (g === 1) box = Math.max(1, box - 1);
+    else box = 1;
+    var ord = Math.round(new Date(d + 'T00:00:00').getTime() / 86400000);
+    prog[key] = { b: box, d: ord + INTERVALS[box], l: (prev && isFinite(prev.l) ? prev.l : 0) + (g === 0 ? 1 : 0) };
+    if (g === 0) {
+      var w = v.wrong[deck];
+      var wc = (w[key] && isFinite(w[key].c)) ? w[key].c : 0;
+      w[key] = { c: wc + 1 };
+    }
+    // 统计：新学 / 复习 + 打卡连击
+    var isNew = !prev;
+    var day = v.stats.daily[d] || { n: 0, r: 0 };
+    if (isNew) day.n += 1; else day.r += 1;
+    v.stats.daily[d] = day;
+    if (v.stats.lastStudyDate === d) {
+      // 今天已学过，streak 不动
+    } else if (v.stats.lastStudyDate === dateShift(d, -1)) {
+      v.stats.streak += 1;
+    } else {
+      v.stats.streak = 1;
+    }
+    v.stats.lastStudyDate = d;
+    persist();
+    return { box: box, isNew: isNew };
+  }
+
+  /** 日期字符串平移（内部工具） */
+  function dateShift(dateStr, delta) {
+    var dt = new Date(dateStr + 'T00:00:00');
+    dt.setDate(dt.getDate() + delta);
+    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    return dt.getFullYear() + '-' + pad(dt.getMonth() + 1) + '-' + pad(dt.getDate());
+  }
+
+  /** 快速筛选：标记 / 取消"已掌握"（脱离学习队列） */
+  function vocabSetKnown(deck, idx, on) {
+    var v = getData().vocab;
+    var key = String(Math.round(Number(idx)));
+    if (on) {
+      v.known[deck][key] = 1;
+      delete v.progress[deck][key];   // 已掌握的词不再占学习进度
+    } else {
+      delete v.known[deck][key];
+    }
+    persist();
+  }
+
+  /** 生词本：切换收藏 */
+  function vocabToggleBookmark(deck, idx) {
+    var v = getData().vocab;
+    var key = String(Math.round(Number(idx)));
+    if (v.bookmarks[deck][key]) delete v.bookmarks[deck][key];
+    else v.bookmarks[deck][key] = 1;
+    persist();
+    return !!v.bookmarks[deck][key];
+  }
+
+  /** 学习会话持久化（中途退出可续）；传 null 清除 */
+  function vocabSetSession(session) {
+    getData().vocab.session = session || null;
+    persist();
+  }
+
   // ==================== 对外 API：统计 ====================
 
   /**
@@ -2681,6 +2821,13 @@ var Store = (function () {
     updateHabit: updateHabit,
     deleteHabit: deleteHabit,
     toggleHabitDay: toggleHabitDay,
+    // 背单词（vocab）
+    getVocab: getVocab,
+    setVocabSettings: setVocabSettings,
+    vocabGrade: vocabGrade,
+    vocabSetKnown: vocabSetKnown,
+    vocabToggleBookmark: vocabToggleBookmark,
+    vocabSetSession: vocabSetSession,
     // 统计
     getMonthSummary: getMonthSummary,
     getMonthlyTrend: getMonthlyTrend,

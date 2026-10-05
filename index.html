@@ -298,13 +298,10 @@
         <button id="add-event-btn" class="btn-secondary day-add-btn"><svg class="ic ic-sm"><use href="#i-plus"></use></svg>新建纪念日 / 倒计时</button>
       </div>
 
-      <!-- 背单词模块（学习闭环在后续阶段接入，先占位） -->
+      <!-- 背单词模块：常态内容 + 学习会话（全屏接管） -->
       <div id="life-vocab" class="life-mod hidden">
-        <div class="card vocab-placeholder">
-          <span class="empty-art"><svg class="ic"><use href="#i-graduation-cap"></use></svg></span>
-          <p class="empty-title">背单词 · 四六级</p>
-          <p class="empty-sub">每日 50 词 · 例句 · 每日自检与周期测试，即将上线</p>
-        </div>
+        <div id="vocab-main"></div>
+        <div id="vocab-study" class="hidden"></div>
       </div>
 
       <!-- 饮食模块（原独立饮食页整体并入；内部元素 id 与逻辑零改动） -->
@@ -739,6 +736,9 @@
 <script src="js/lunar.js"></script>
 <script src="js/days.js"></script>
 <script src="js/days-ui.js"></script>
+<script src="js/vocab-db.js"></script>
+<script src="js/vocab.js"></script>
+<script src="js/vocab-ui.js"></script>
 <script src="js/alerts.js"></script>
 <script src="js/home-ui.js"></script>
 <script src="js/spring.js"></script>
