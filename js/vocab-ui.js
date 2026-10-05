@@ -1,8 +1,10 @@
 /**
- * vocab-ui.js —— 背单词界面（今日任务 + 学习会话 + 快速筛选 + 设置）
+ * vocab-ui.js —— 背单词界面（今日任务 + 学习会话 + 快速筛选 + 测试 + 设置）
  *
- * 依赖：core.js（Store）、vocab.js（Vocab）、days.js（Days）、icons.js（Icons）。
- * 结构：#vocab-main 常态内容；#vocab-study 学习/筛选会话（全屏接管，隐藏分段器）。
+ * 依赖：core.js（Store）、vocab.js（Vocab）、days.js（Days）、icons.js（Icons）、
+ *       spring.js（Spring，运行时调用）、days-ui.js（LifeUI.confettiHTML 撒花）。
+ * 结构：#vocab-main 常态内容；#vocab-study 会话层——fixed 全屏专注层，
+ *       盖住顶栏与底栏（进出同路径弹簧；Android 返回键 = 退出会话不丢进度）。
  * 事件绑定只在 init() 做一次；render() 由 LifeUI 在背单词分段被调起。
  */
 var VocabUI = (function () {
@@ -18,12 +20,16 @@ var VocabUI = (function () {
 
   var mode = null;          // null | 'study' | 'triage' | 'test-setup' | 'test' | 'test-result'
   var revealed = false;     // 学习卡是否已翻开
-  var triage = null;        // { queue:[idx], pos, total }
+  var triage = null;        // { queue:[idx], pos, total, markedCount }
   var studyTask = null;     // buildToday() 返回的任务信息
   var toastTimer = 0;
   var testRange = 'today';  // 测试设置页当前范围
   var testSize = 20;        // 测试设置页当前题量
   var test = null;          // { items,pos,correct,wrong,start,kind,key,locked }
+  var backPushed = false;   // 已为会话压入一条 history 记录（Android 返回键 = 退出会话）
+  var flyAxis = null;       // 学习卡飞出动画（进行中时禁止再次抓卡）
+  var backAxis = null;      // 学习卡弹回动画
+  var confettiShownDate = null;   // 完成页撒花每天只放一次
 
   function toast(msg) {
     var t = $('toast');
@@ -34,7 +40,28 @@ var VocabUI = (function () {
     toastTimer = setTimeout(function () { t.classList.add('hidden'); }, 1800);
   }
 
-  /** 进度环 SVG：done/total */
+  /** 元素单次入场：淡入 + 轻微上浮（设置展开等非手势进场） */
+  function popIn(el) {
+    if (!el || Spring.reduced) return;
+    el.style.transition = 'none';
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(-6px)';
+    void el.offsetWidth;
+    el.style.transition = 'opacity 190ms ease-out, transform 250ms cubic-bezier(0.22, 1, 0.36, 1)';
+    el.style.opacity = '1';
+    el.style.transform = 'translateY(0)';
+    setTimeout(function () { el.style.transition = ''; el.style.transform = ''; el.style.opacity = ''; }, 270);
+  }
+
+  /** 内容卡入场（换词 / 换题 / 换屏）：CSS 动画，减弱动态下由全局规则关掉 */
+  function cardEnter(el) {
+    if (!el) return;
+    el.classList.remove('q-enter');
+    void el.offsetWidth;
+    el.classList.add('q-enter');
+  }
+
+  /** 进度环 SVG：done/total（今日任务卡用） */
   function ringHTML(done, total, label) {
     var R = 52, C = 2 * Math.PI * R;
     var pct = total > 0 ? Math.min(1, done / total) : (total === 0 ? 1 : 0);
@@ -45,6 +72,91 @@ var VocabUI = (function () {
       '<text x="64" y="60" class="vr-num">' + done + '</text>' +
       '<text x="64" y="82" class="vr-sub">' + esc(label || ('/' + total)) + '</text>' +
     '</svg>';
+  }
+
+  /* ==================== 会话层（全屏专注层） ==================== */
+
+  /** 是否处于任何会话/测试中（app.js 开屏简报避让用） */
+  function sessionActive() { return !!mode; }
+
+  function pushBackGuard() {
+    if (backPushed || !window.history || !history.pushState) return;
+    try { history.pushState({ vocabSession: 1 }, ''); backPushed = true; } catch (e) { /* 忽略 */ }
+  }
+
+  function popBackGuard() {
+    if (!backPushed) return;
+    backPushed = false;
+    try { history.back(); } catch (e) { /* 忽略 */ }
+  }
+
+  /** 会话层上场：盖住顶栏/底栏，底部上滑入场（退出走同一条路径，§7） */
+  function showLayer() {
+    var layer = $('vocab-study');
+    var seg = document.querySelector('#view-life .life-seg');
+    if (seg) seg.classList.add('hidden');
+    $('vocab-main').classList.add('hidden');
+    if (!layer.classList.contains('hidden')) return;
+    layer.classList.remove('hidden');
+    pushBackGuard();
+    if (Spring.reduced) return;
+    layer.style.transition = 'none';
+    layer.style.opacity = '0';
+    layer.style.transform = 'translateY(28px)';
+    void layer.offsetWidth;
+    layer.style.transition = 'opacity 200ms ease-out, transform 280ms cubic-bezier(0.22, 1, 0.36, 1)';
+    layer.style.opacity = '1';
+    layer.style.transform = 'translateY(0)';
+    setTimeout(function () { layer.style.transition = ''; layer.style.transform = ''; }, 300);
+  }
+
+  function exitSession(fromPop) {
+    if (!mode) return;
+    mode = null;
+    revealed = false;
+    triage = null;
+    test = null;
+    if (flyAxis) { flyAxis.kill(); flyAxis = null; }
+    if (backAxis) { backAxis.kill(); backAxis = null; }
+    if (!fromPop) popBackGuard();
+    var layer = $('vocab-study');
+    var seg = document.querySelector('#view-life .life-seg');
+    function finishHide() {
+      layer.classList.add('hidden');
+      layer.style.transition = ''; layer.style.opacity = ''; layer.style.transform = '';
+      if (seg) seg.classList.remove('hidden');
+      $('vocab-main').classList.remove('hidden');
+      renderMain();
+    }
+    if (Spring.reduced) { finishHide(); return; }
+    // 与入场同一条路径的镜像缓动：材质消解而非凭空消失（§7 §12）
+    layer.style.transition = 'opacity 170ms ease-in, transform 230ms cubic-bezier(0.64, 0, 0.78, 0)';
+    layer.style.opacity = '0';
+    layer.style.transform = 'translateY(28px)';
+    setTimeout(finishHide, 240);
+  }
+
+  /**
+   * 会话层骨架：细进度条贴顶 + 顶栏（退出 / 计数 / 发音）+ 垂直居中内容。
+   * opt.top=false 的屏（结算/完成）不渲染顶栏——退路只留底部一组按钮，语义唯一。
+   */
+  function shell(opt) {
+    var top = '';
+    if (opt.top) {
+      top = '<header class="vs-top">' +
+        '<button type="button" class="vocab-exit" data-act="exit">' +
+          Icons.svg('close', 'ic-sm') + '退出</button>' +
+        (opt.bar != null
+          ? '<div class="vs-bar"><i style="width:' + opt.bar + '%"></i></div>'
+          : '<span class="vs-spring"></span>') +
+        (opt.count ? '<span class="vs-count">' + opt.count + '</span>' : '') +
+        (opt.speak
+          ? '<button type="button" class="vocab-speak" data-act="' + opt.speak + '">' +
+            Icons.svg('volume', 'ic-sm') + '</button>'
+          : '') +
+      '</header>';
+    }
+    return top + '<div class="vs-body"><div class="vs-center">' + opt.body + '</div></div>';
   }
 
   /* ==================== 常态：今日任务 + 统计 + 设置 ==================== */
@@ -60,7 +172,7 @@ var VocabUI = (function () {
   function renderMain() {
     var box = $('vocab-main');
     var study = $('vocab-study');
-    if (study) study.classList.add('hidden');
+    if (study && study.classList.contains('hidden') === false) return;  // 会话中不重绘
     if (!box) return;
     var v = Store.getVocab();
     var deck = v.settings.deck;
@@ -71,24 +183,35 @@ var VocabUI = (function () {
     var deckName = deck === 'cet6' ? '六级' : '四级';
     var deckSizes = (window.VOCAB_DB && VOCAB_DB[deck]) ? VOCAB_DB[deck].length : 0;
 
-    // 备考联动：绑定考试 → 倒计时 + 剩余词 + 建议每日 + 速度预测
+    // 备考联动：距离大数字 + 两行辅注 + 一行结论（数字排版对齐全站规范，§15）
     var examHTML = '';
     if (v.settings.examEventId && window.Days) {
       var ep = Vocab.examProgress();
       if (ep) {
-        var dayTxt = ep.today ? '就是今天' : (ep.past ? '已过 ' + ep.daysLeft : '还有 ' + ep.daysLeft + ' 天');
-        var lines = '<span class="vocab-exam">' + esc(ep.icon) + ' 距「' + esc(ep.title) + '」' + dayTxt + '</span>' +
-          '<div class="vocab-task-line">剩余 <b>' + ep.remaining + '</b> 词' +
-          (ep.perDay ? ' · 建议每日 <b>' + ep.perDay + '</b> 词' : '') + '</div>';
+        var eta = '';
         if (ep.etaDays !== null && !ep.past && !ep.today) {
-          lines += ep.etaDays <= ep.daysLeft
-            ? '<div class="vocab-task-line vocab-eta-ok">近 7 天均速 ' + ep.speed + ' 词/天 · 按当前速度考前可完成 ✓</div>'
-            : '<div class="vocab-task-line vocab-eta-bad">近 7 天均速 ' + ep.speed + ' 词/天 · 按当前速度考前还差约 ' +
+          eta = ep.etaDays <= ep.daysLeft
+            ? '<div class="vocab-exam-eta ok">近 7 天均速 ' + ep.speed + ' 词/天 · 按当前速度可完成 ✓</div>'
+            : '<div class="vocab-exam-eta bad">近 7 天均速 ' + ep.speed + ' 词/天 · 按当前速度还差约 ' +
               Math.max(1, ep.remaining - Math.floor(ep.speed * ep.daysLeft)) + ' 词</div>';
         } else if (ep.speed === 0 && ep.remaining > 0 && !ep.past) {
-          lines += '<div class="vocab-task-line">近 7 天还没学新词，今天开始吧</div>';
+          eta = '<div class="vocab-exam-eta">近 7 天还没学新词，今天开始吧</div>';
         }
-        examHTML = lines;
+        examHTML =
+          '<div class="vocab-exam-block">' +
+            '<div class="vocab-exam-row">' +
+              '<span class="vocab-exam-ic">' + esc(ep.icon || '🎓') + '</span>' +
+              '<span class="vocab-exam-name">距「' + esc(ep.title) + '」</span>' +
+              '<span class="vocab-exam-days">' +
+                (ep.today ? '就是今天'
+                  : (ep.past ? '已过 <b>' + Math.abs(ep.daysLeft) + '</b><i>天</i>'
+                             : '<b>' + ep.daysLeft + '</b><i>天</i>')) +
+              '</span>' +
+            '</div>' +
+            '<div class="vocab-exam-meta">剩余 <b>' + ep.remaining + '</b> 词' +
+              (ep.perDay ? ' · 建议每日 <b>' + ep.perDay + '</b> 词' : '') + '</div>' +
+            eta +
+          '</div>';
       }
     }
 
@@ -102,10 +225,10 @@ var VocabUI = (function () {
       '<div class="card vocab-task-card">' +
         '<div class="card-head"><h3 class="card-title">今日任务 · ' + deckName + '</h3>' +
           '<span class="vocab-deck-count">' + deckSizes + ' 词</span></div>' +
+        examHTML +
         '<div class="vocab-task-body">' +
           ringHTML(prev.done, prev.total, '/' + prev.total) +
           '<div class="vocab-task-info">' +
-            examHTML +
             '<div class="vocab-task-line">待复习 <b>' + Math.min(prev.due, v.settings.reviewCap) + '</b> · ' +
               '新词还剩 <b>' + prev.newLeft + '</b></div>' +
             '<div class="vocab-task-line">今日已学 新 <b>' + ts.isNewToday + '</b> / 复习 <b>' + ts.isReviewToday + '</b>' +
@@ -152,7 +275,7 @@ var VocabUI = (function () {
           '<select id="vocab-exam-select"><option value="">不绑定</option></select></div>' +
         '<div class="form-row"><label class="form-label">完成自动打卡</label>' +
           '<select id="vocab-habit-select"><option value="">不自动打卡</option></select></div>' +
-        '<p class="hint">每日新词默认 50；吃不消就调低，比积压更好。设置按账户保存。</p>' +
+        '<p class="hint">「已掌握」= 复习周期到 30 天以上的词 + 快速筛选标记的词。每日新词默认 50，吃不消就调低，比积压更好。设置按账户保存。</p>' +
       '</div>' +
 
       '<div class="card vocab-stats-card">' +
@@ -163,7 +286,6 @@ var VocabUI = (function () {
           statCell('错词本', st.wrong) +
         '</div>' +
         historyHTML() +
-        '<p class="hint">「已掌握」= 复习周期到 30 天以上的词 + 快速筛选标记的词。</p>' +
       '</div>';
 
     fillSelects(v);
@@ -245,56 +367,42 @@ var VocabUI = (function () {
     var queue = Vocab.triageQueue();
     if (!queue.length) { toast('没有可筛选的新词了'); return; }
     mode = 'triage';
-    triage = { queue: queue, pos: 0, total: queue.length };
+    triage = { queue: queue, pos: 0, total: queue.length, markedCount: 0 };
     renderTriage();
   }
 
-  function exitSession() {
-    mode = null;
-    revealed = false;
-    triage = null;
-    test = null;
-    var study = $('vocab-study');
-    if (study) study.classList.add('hidden');
-    var seg = document.querySelector('#view-life .life-seg');
-    if (seg) seg.classList.remove('hidden');
-    $('vocab-main').classList.remove('hidden');
-    renderMain();
-  }
-
-  /** 会话接管：隐藏分段器与常态内容，只留会话卡与退出 */
-  function takeOver() {
-    var study = $('vocab-study');
-    study.classList.remove('hidden');
-    var seg = document.querySelector('#view-life .life-seg');
-    if (seg) seg.classList.add('hidden');
-    $('vocab-main').classList.add('hidden');
+  /** 学习卡结构：滑动意图角标（左=不认识 右=认识）+ 单词卡 */
+  function studyCardHTML(card) {
+    var e = card.entry;
+    return '<div class="vocab-swipe-zone">' +
+        '<span class="grade-hint gh-left" aria-hidden="true">不认识</span>' +
+        '<span class="grade-hint gh-right" aria-hidden="true">认识</span>' +
+        '<div class="vocab-word-card q-enter" data-act="reveal">' +
+          '<div class="vw-word">' + esc(e.word) + '</div>' +
+          (e.phon ? '<div class="vw-phon">' + esc(e.phon) + '</div>' : '') +
+          (revealed ? '<div class="vw-reveal">' + revealHTML(e) + '</div>'
+                    : '<div class="vw-tap">点卡片或按空格看释义</div>') +
+        '</div>' +
+      '</div>';
   }
 
   function renderStudy() {
-    takeOver();
+    showLayer();
     var card = Vocab.currentCard();
-    var v = Store.getVocab();
     if (!card) { renderFinish(); return; }
-    var study = $('vocab-study');
-    var pos = v.session ? v.session.pos : 0;
+    var v = Store.getVocab();
     var total = v.session ? v.session.queue.length : 0;
-
-    study.innerHTML =
-      '<div class="card vocab-session-card">' +
-        '<div class="vocab-session-top">' +
-          '<button type="button" class="vocab-exit" data-act="exit">' + Icons.svg('close', 'ic-sm') + '退出</button>' +
-          '<span class="vocab-progress">' + (pos + 1) + ' / ' + total + '</span>' +
-          '<button type="button" class="vocab-speak" data-act="speak">' + Icons.svg('bell', 'ic-sm') + '</button>' +
-        '</div>' +
-        '<div class="vocab-word-card" data-act="reveal">' +
-          '<div class="vw-word">' + esc(card.entry.word) + '</div>' +
-          (card.entry.phon ? '<div class="vw-phon">' + esc(card.entry.phon) + '</div>' : '') +
-          (revealed ? revealHTML(card.entry) : '<div class="vw-tap">点卡片或按空格看释义</div>') +
-        '</div>' +
-        (revealed ? gradeRow() : '') +
-        '<p class="hint vocab-keys">左滑 认识 · 上滑 看释义 · 左下 不认识 · 键盘 空格 / 1 / 2 / 3</p>' +
-      '</div>';
+    var pos = v.session ? v.session.pos : 0;
+    var study = $('vocab-study');
+    study.innerHTML = shell({
+      top: true,
+      bar: total ? Math.round(pos / total * 100) : 0,
+      count: (pos + 1) + ' / ' + total,
+      speak: 'speak',
+      body: studyCardHTML(card) +
+        (revealed ? '<div class="vw-reveal vr-grade">' + gradeRow() + '</div>' : '') +
+        '<p class="hint vocab-keys">滑右 认识 · 上滑 看释义 · 滑左 不认识 · 键盘 空格 / 1 / 2 / 3</p>'
+    });
   }
 
   function revealHTML(e) {
@@ -321,56 +429,55 @@ var VocabUI = (function () {
     Store.vocabSetSession(null);
     var ts = Vocab.todayStat();
     var auto = Vocab.autoCheckHabit();
+    var today = Vocab.todayStr();
+    var confetti = '';
+    if (confettiShownDate !== today && window.LifeUI && LifeUI.confettiHTML) {
+      confettiShownDate = today;
+      confetti = LifeUI.confettiHTML();       // 完成每日任务是值得庆祝的时刻（§13）
+    }
+    Spring.haptic(12);
     var study = $('vocab-study');
-    study.innerHTML =
-      '<div class="card vocab-session-card">' +
-        '<div class="vocab-session-top">' +
-          '<button type="button" class="vocab-exit" data-act="exit">' + Icons.svg('close', 'ic-sm') + '退出</button>' +
-        '</div>' +
-        '<div class="vocab-finish">' +
+    study.innerHTML = shell({
+      top: false,
+      body: '<div class="vocab-finish q-enter">' +
+          confetti +
           '<span class="empty-art"><svg class="ic"><use href="#i-check-circle"></use></svg></span>' +
           '<p class="empty-title">今日任务完成 ✓</p>' +
           '<p class="vocab-finish-sub">新学 ' + ts.isNewToday + ' 词 · 复习 ' + ts.isReviewToday +
             ' 词 · 连续 ' + ts.streak + ' 天</p>' +
           (auto ? '<p class="hint">已自动为打卡计划打上今天的卡 ✓</p>' : '') +
           '<button type="button" class="btn-primary" data-act="exit">返回</button>' +
-        '</div>' +
-      '</div>';
+        '</div>'
+    });
   }
 
   /* ==================== 快速筛选 ==================== */
 
   function renderTriage() {
-    takeOver();
+    showLayer();
     var v = Store.getVocab();
     var deck = v.settings.deck;
     var study = $('vocab-study');
     if (triage.pos >= triage.queue.length) {
-      var marked = triage.total - triage.queue.length + triage.pos;
-      study.innerHTML =
-        '<div class="card vocab-session-card">' +
-          '<div class="vocab-session-top">' +
-            '<button type="button" class="vocab-exit" data-act="exit">' + Icons.svg('close', 'ic-sm') + '退出</button>' +
-          '</div>' +
-          '<div class="vocab-finish">' +
+      study.innerHTML = shell({
+        top: false,
+        body: '<div class="vocab-finish q-enter">' +
             '<span class="empty-art"><svg class="ic"><use href="#i-check-circle"></use></svg></span>' +
             '<p class="empty-title">筛选完成 ✓</p>' +
             '<p class="vocab-finish-sub">本轮标记已掌握 ' + triage.markedCount + ' 词，其余进入每日新词队列</p>' +
             '<button type="button" class="btn-primary" data-act="exit">返回</button>' +
-          '</div>' +
-        '</div>';
+          '</div>'
+      });
       return;
     }
     var idx = triage.queue[triage.pos];
     var e = Vocab.entry(deck, idx) || ['', '', ''];
-    study.innerHTML =
-      '<div class="card vocab-session-card">' +
-        '<div class="vocab-session-top">' +
-          '<button type="button" class="vocab-exit" data-act="exit">' + Icons.svg('close', 'ic-sm') + '退出</button>' +
-          '<span class="vocab-progress">剩余 ' + (triage.queue.length - triage.pos) + ' / ' + triage.total + '</span>' +
-          '<button type="button" class="vocab-speak" data-act="speak-triage">' + Icons.svg('bell', 'ic-sm') + '</button>' +
-        '</div>' +
-        '<div class="vocab-word-card">' +
+    study.innerHTML = shell({
+      top: true,
+      bar: Math.round(triage.pos / triage.total * 100),
+      count: (triage.pos + 1) + ' / ' + triage.total,
+      speak: 'speak-triage',
+      body: '<div class="vocab-word-card q-enter">' +
           '<div class="vw-word">' + esc(e[0]) + '</div>' +
           (e[1] ? '<div class="vw-phon">' + esc(e[1]) + '</div>' : '') +
           '<div class="vw-zh">' + esc(e[2]) + '</div>' +
@@ -381,8 +488,8 @@ var VocabUI = (function () {
           '<button type="button" class="grade-btn g0" data-triage="0">还不认识</button>' +
           '<button type="button" class="grade-btn g2" data-triage="1">已掌握</button>' +
         '</div>' +
-        '<p class="hint vocab-keys">认识的直接标记，不会进入学习队列；不认识的留在这里每天学</p>' +
-      '</div>';
+        '<p class="hint vocab-keys">认识的直接标记，不会进入学习队列；不认识的留在这里每天学</p>'
+    });
   }
 
   function triageNext(markKnown) {
@@ -409,7 +516,7 @@ var VocabUI = (function () {
   }
 
   function renderTestSetup() {
-    takeOver();
+    showLayer();
     var study = $('vocab-study');
     var chips = RANGES.map(function (r) {
       var n = Vocab.rangeCandidates(r[0], Vocab.todayStr()).length;
@@ -421,11 +528,9 @@ var VocabUI = (function () {
         '" data-size="' + n + '">' + n + ' 题</button>';
     }).join('');
     var sel = Vocab.rangeCandidates(testRange, Vocab.todayStr()).length;
-    study.innerHTML =
-      '<div class="card vocab-session-card">' +
-        '<div class="vocab-session-top">' +
-          '<button type="button" class="vocab-exit" data-act="exit">' + Icons.svg('close', 'ic-sm') + '退出</button>' +
-        '</div>' +
+    study.innerHTML = shell({
+      top: true,
+      body: '<div class="card vocab-setup-card q-enter">' +
         '<h3 class="vocab-sec-title">测试 · 看英文选中文</h3>' +
         '<div class="form-row"><label class="form-label">范围</label>' +
           '<div class="chip-row" id="test-range-chips">' + chips + '</div></div>' +
@@ -435,7 +540,8 @@ var VocabUI = (function () {
           (sel ? '' : ' disabled') + '>' +
           (sel ? '开始测试（' + Math.min(sel, testSize) + ' 题）' : '这个范围还没有可测的词') + '</button>' +
         '<p class="hint">答错会标出正确答案并回炉：该词进错词本、复习排到明天。</p>' +
-      '</div>';
+      '</div>'
+    });
   }
 
   function startTest(range, size) {
@@ -453,19 +559,15 @@ var VocabUI = (function () {
   }
 
   function renderTest() {
-    takeOver();
+    showLayer();
     var item = test.items[test.pos];
     var study = $('vocab-study');
-    var secs = Math.round((Date.now() - test.start) / 1000);
-    study.innerHTML =
-      '<div class="card vocab-session-card">' +
-        '<div class="vocab-session-top">' +
-          '<button type="button" class="vocab-exit" data-act="exit">' + Icons.svg('close', 'ic-sm') + '退出</button>' +
-          '<span class="vocab-progress">第 ' + (test.pos + 1) + ' / ' + test.items.length + ' 题 · ' +
-            Math.floor(secs / 60) + ':' + ('0' + secs % 60).slice(-2) + '</span>' +
-          '<button type="button" class="vocab-speak" data-act="speak-test">' + Icons.svg('bell', 'ic-sm') + '</button>' +
-        '</div>' +
-        '<div class="vocab-word-card vocab-quiz-card">' +
+    study.innerHTML = shell({
+      top: true,
+      bar: Math.round(test.pos / test.items.length * 100),
+      count: (test.pos + 1) + ' / ' + test.items.length,
+      speak: 'speak-test',
+      body: '<div class="vocab-word-card vocab-quiz-card q-enter">' +
           '<div class="vw-word">' + esc(item.word) + '</div>' +
           (item.phon ? '<div class="vw-phon">' + esc(item.phon) + '</div>' : '') +
         '</div>' +
@@ -475,8 +577,8 @@ var VocabUI = (function () {
               '<span class="vo-mark">' + 'ABCD'[i] + '</span>' + esc(zh) + '</button>';
           }).join('') +
         '</div>' +
-        (test.locked ? '<button type="button" class="btn-primary vocab-next" data-act="test-next">下一题</button>' : '') +
-      '</div>';
+        (test.locked ? '<button type="button" class="btn-primary vocab-next" data-act="test-next">下一题</button>' : '')
+    });
   }
 
   function answerTest(optIdx) {
@@ -495,6 +597,7 @@ var VocabUI = (function () {
       test.correct += 1;
       setTimeout(function () { nextTestItem(); }, 600);   // 答对 0.6 秒自动下一题
     } else {
+      Spring.haptic(12);                                  // 答错与视觉同帧（§13）
       test.wrong.push(item.idx);
       // 答错：把释义与例句再显示一遍，并给出「下一题」按钮
       var card = document.querySelector('.vocab-quiz-card');
@@ -502,9 +605,10 @@ var VocabUI = (function () {
         ? '<div class="vw-ex"><p class="vw-ex-en">' + Vocab.highlightExample(item.exEn, item.word) + '</p>' +
           (item.exCn ? '<p class="vw-ex-cn">' + esc(item.exCn) + '</p>' : '') + '</div>'
         : '';
-      card.insertAdjacentHTML('beforeend', '<div class="vw-zh vocab-answer-zh">' + esc(item.zh) + '</div>' + ex);
+      card.insertAdjacentHTML('beforeend',
+        '<div class="vw-reveal"><div class="vw-zh vocab-answer-zh">' + esc(item.zh) + '</div>' + ex + '</div>');
       if (!document.querySelector('.vocab-next')) {
-        var quizCard = document.querySelector('.vocab-session-card');
+        var quizCard = document.querySelector('.vs-body');
         quizCard.insertAdjacentHTML('beforeend',
           '<button type="button" class="btn-primary vocab-next" data-act="test-next">下一题</button>');
       }
@@ -518,8 +622,44 @@ var VocabUI = (function () {
     else renderTest();
   }
 
+  /** 结算环：正确率描边 + 中央大数字，由 animateResult 驱动生长 */
+  function resultRingHTML(pct) {
+    var C = 2 * Math.PI * 52;
+    var tone = pct >= 80 ? ' good' : (pct < 60 ? ' bad' : '');
+    return '<svg class="vocab-ring vr-result' + tone + '" viewBox="0 0 128 128" aria-hidden="true">' +
+      '<circle class="vr-bg" cx="64" cy="64" r="52" />' +
+      '<circle class="vr-fg vr-arc" cx="64" cy="64" r="52" style="stroke-dasharray:0 ' + C.toFixed(1) + '" />' +
+      '<text x="64" y="73" class="vr-pct">0%</text>' +
+    '</svg>';
+  }
+
+  /** 结算大数字计数 + 环形描边同一帧驱动（§13 harmony）；减弱动态直接显示终值 */
+  function animateResult(pct) {
+    var svg = document.querySelector('.vr-result');
+    if (!svg) return;
+    var arc = svg.querySelector('.vr-arc');
+    var num = svg.querySelector('.vr-pct');
+    var C = 2 * Math.PI * 52;
+    var target = C * pct / 100;
+    if (Spring.reduced) {
+      arc.style.strokeDasharray = target.toFixed(1) + ' ' + C.toFixed(1);
+      num.textContent = pct + '%';
+      return;
+    }
+    var t0 = 0, DUR = 650;
+    function tick(now) {
+      if (!t0) t0 = now;
+      var t = Math.min(1, (now - t0) / DUR);
+      var e = 1 - Math.pow(1 - t, 3);
+      arc.style.strokeDasharray = (target * e).toFixed(1) + ' ' + C.toFixed(1);
+      num.textContent = Math.round(pct * e) + '%';
+      if (t < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
   function renderTestResult() {
-    takeOver();
+    showLayer();
     var total = test.items.length;
     var pct = total ? Math.round(test.correct / total * 100) : 0;
     var secs = Math.round((Date.now() - test.start) / 1000);
@@ -535,31 +675,41 @@ var VocabUI = (function () {
     test.wrong.forEach(function (idx) {
       Store.vocabGrade(deck, idx, 0, Vocab.todayStr());
     });
-    var wrongList = test.wrong.length
-      ? '<div class="vocab-wrong-list">' + test.wrong.map(function (idx) {
-          var e = Vocab.entry(deck, idx) || ['', '', ''];
-          return '<div class="vw-row"><b>' + esc(e[0]) + '</b><span>' + esc((e[2] || '').slice(0, 24)) + '</span></div>';
-        }).join('') + '</div>'
-      : '<p class="vocab-allright">全对，没有错题 🎉</p>';
+    // 错题列表：>3 条默认收折（常见路径先看到成绩，错题一层之隔，§6）
+    var wrongHTML;
+    if (test.wrong.length) {
+      var rows = test.wrong.map(function (idx) {
+        var e = Vocab.entry(deck, idx) || ['', '', ''];
+        return '<div class="vw-row"><b>' + esc(e[0]) + '</b><span>' +
+          esc((e[2] || '').slice(0, 24)) + '</span></div>';
+      });
+      var more = rows.length > 3
+        ? '<div class="vw-rows-more hidden" id="vw-rows-more">' + rows.slice(3).join('') + '</div>' +
+          '<button type="button" class="vw-more-btn" data-act="wrong-toggle">展开全部 ' + rows.length + ' 条</button>'
+        : '';
+      wrongHTML = '<div class="vocab-wrong-list">' + rows.slice(0, 3).join('') + '</div>' + more;
+    } else {
+      wrongHTML = '<p class="vocab-allright">全对，没有错题 🎉</p>';
+    }
+    var actions = test.wrong.length
+      ? '<button type="button" class="btn-primary" data-act="test-drill">错题再练一轮</button>' +
+        '<button type="button" class="btn-secondary" data-act="exit">返回</button>'
+      : '<button type="button" class="btn-primary" data-act="exit">返回</button>';
     var study = $('vocab-study');
-    study.innerHTML =
-      '<div class="card vocab-session-card">' +
-        '<div class="vocab-session-top">' +
-          '<button type="button" class="vocab-exit" data-act="exit">' + Icons.svg('close', 'ic-sm') + '返回</button>' +
-        '</div>' +
-        '<div class="vocab-finish">' +
-          '<p class="vocab-score' + (pct >= 80 ? ' good' : (pct < 60 ? ' bad' : '')) + '">' + pct + '%</p>' +
+    study.innerHTML = shell({
+      top: false,
+      body: '<div class="vocab-finish vr-wrap q-enter">' +
+          resultRingHTML(pct) +
           '<p class="vocab-finish-sub">答对 ' + test.correct + ' / ' + total + ' 题 · 用时 ' + time +
             (test.kind === 'daily' ? ' · 已记入今日自检' : test.kind === 'weekly' ? ' · 已记入本周周测' :
              test.kind === 'monthly' ? ' · 已记入本月月测' : '') + '</p>' +
-          wrongList +
-          (test.wrong.length
-            ? '<button type="button" class="btn-secondary btn-sm vocab-drill" data-act="test-drill">错题再练一轮</button>'
-            : '') +
-          '<button type="button" class="btn-primary vocab-start" data-act="exit">返回</button>' +
-        '</div>' +
-      '</div>';
+          wrongHTML +
+          '<div class="vr-actions">' + actions + '</div>' +
+        '</div>'
+    });
     mode = 'test-result';
+    animateResult(pct);
+    Spring.haptic(12);
   }
 
   function drillWrong() {
@@ -585,60 +735,219 @@ var VocabUI = (function () {
     } catch (e) { toast('发音失败'); }
   }
 
-  /* ==================== 手势（学习卡：右=认识 左=不认识 上=看释义） ==================== */
+  /* ==================== 学习卡手势 ==================== */
+  /* 跟手 1:1（§2）：卡片随手指位移并轻微旋转，评分意图以角标透明度渐显；
+     松手速度优先判定（§5），提交则继承速度飞出（§6 投射由速度阈值体现），
+     取消则弹回；未翻开时水平方向只给少量阻力位移，提示「先看释义」（§8）。 */
 
-  var swipe = { active: false, x0: 0, y0: 0, engaged: false };
+  var gest = { active: false, engaged: false, axis: null, pointerId: -1,
+    x0: 0, y0: 0, dx: 0, dy: 0, tracker: null };
+
+  function wordCardEl() { return document.querySelector('#vocab-study .vocab-word-card'); }
+  function hintEl(side) { return document.querySelector('#vocab-study .gh-' + side); }
+
+  /** 拖动渲染：位移 + 旋转 + 意图角标（每帧调用，全程连续反馈 §1） */
+  function renderDrag(dx, dy) {
+    var card = wordCardEl();
+    if (!card) return;
+    if (gest.axis === 'x') {
+      if (revealed) {
+        card.style.transform = 'translateX(' + dx + 'px) rotate(' + (dx * 0.06).toFixed(2) + 'deg)';
+        var l = hintEl('left'), r = hintEl('right');
+        var op = Math.max(0, Math.min(1, Math.abs(dx) / 80));
+        if (l) l.style.opacity = dx < 0 ? op : 0;
+        if (r) r.style.opacity = dx > 0 ? op : 0;
+      } else {
+        // 未翻开：水平方向渐进阻力，最多跟 12px（§9 软边界，方向提示）
+        var eff = Math.sign(dx) * Math.min(Math.abs(dx) * 0.18, 12);
+        card.style.transform = 'translateX(' + eff.toFixed(1) + 'px)';
+      }
+    } else if (gest.axis === 'y') {
+      if (!revealed && dy < 0) {
+        var up = Math.max(dy * 0.45, -52);        // 上滑跟手，露出释义的方向感
+        card.style.transform = 'translateY(' + up.toFixed(1) + 'px)';
+      } else if (!revealed) {
+        card.style.transform = 'translateY(' + (dy * 0.12).toFixed(1) + 'px)';
+      } else {
+        card.style.transform = 'translateY(' + (dy * 0.15).toFixed(1) + 'px)';
+      }
+    }
+  }
+
+  /** 松手弹回：从当前位移出发、继承手指速度（§5 交接） */
+  function springBack() {
+    var card = wordCardEl();
+    if (!card) return;
+    if (backAxis) backAxis.kill();
+    var from = gest.axis === 'x' ? gest.dx : gest.dy;
+    var v = gest.tracker ? gest.tracker.velocity() : 0;
+    var preset = Math.abs(v) > 240 ? Spring.PRESET.momentum : Spring.PRESET.move;
+    card.classList.add('springing');
+    backAxis = new Spring.Axis({
+      from: from,
+      velocity: v,
+      damping: preset.damping,
+      response: preset.response,
+      onUpdate: (function (ax) {
+        return function (x) {
+          var c = wordCardEl();
+          if (!c) return;
+          c.style.transform = ax === 'x'
+            ? 'translateX(' + x.toFixed(1) + 'px) rotate(' + (x * 0.06).toFixed(2) + 'deg)'
+            : 'translateY(' + x.toFixed(1) + 'px)';
+          if (ax === 'x') {
+            var l = hintEl('left'), r = hintEl('right');
+            var op = Math.max(0, Math.min(1, Math.abs(x) / 80));
+            if (l) l.style.opacity = x < 0 ? op : 0;
+            if (r) r.style.opacity = x > 0 ? op : 0;
+          }
+        };
+      })(gest.axis),
+      onSettle: function () {
+        backAxis = null;
+        var c = wordCardEl();
+        if (c) { c.classList.remove('springing'); c.style.transform = ''; }
+        var l = hintEl('left'), r = hintEl('right');
+        if (l) l.style.opacity = 0;
+        if (r) r.style.opacity = 0;
+      }
+    });
+    backAxis.set(0);
+  }
+
+  /** 提交评分：卡片沿手势方向继承速度飞出，落定后渲染下一张（§5 §6） */
+  function commitGrade(g, dir, v, fromDx) {
+    if (flyAxis) return;
+    Spring.haptic(8);
+    var r;
+    try { r = Vocab.gradeCurrent(g); } catch (e) { r = null; }
+    var card = wordCardEl();
+    var l = hintEl('left'), rr = hintEl('right');
+    if (l) l.style.opacity = dir < 0 ? 1 : 0;
+    if (rr) rr.style.opacity = dir > 0 ? 1 : 0;
+
+    function after() {
+      flyAxis = null;
+      revealed = false;
+      if (mode !== 'study') return;
+      if (r && r.finished) renderFinish();
+      else renderStudy();
+    }
+    if (!card || Spring.reduced) { after(); return; }
+    var W = ($('vocab-study').clientWidth || 360);
+    card.style.pointerEvents = 'none';
+    var from = dir === 0 ? 0 : (fromDx || 0);
+    flyAxis = new Spring.Axis({
+      from: from,
+      velocity: dir === 0 ? 0 : v,
+      damping: Spring.PRESET.momentum.damping,
+      response: Spring.PRESET.momentum.response,
+      onUpdate: function (x) {
+        var c = wordCardEl();
+        if (!c) return;
+        if (dir === 0) {
+          c.style.transform = 'translateY(' + x.toFixed(1) + 'px)';
+        } else {
+          c.style.transform = 'translateX(' + x.toFixed(1) + 'px) rotate(' + (x * 0.06).toFixed(2) + 'deg)';
+        }
+        c.style.opacity = String(Math.max(0, 1 - Math.abs(x) / (W * 0.85)));
+      }
+    });
+    flyAxis.onSettle = after;
+    flyAxis.set(dir === 0 ? 96 : dir * W * 1.15);
+  }
+
+  /** 按钮 / 键盘评分入口：保持与滑动手势同一条飞出路径 */
+  function gradeCurrentCard(g) {
+    if (flyAxis) return;
+    if (!revealed && mode === 'study') { reveal(); return; }   // 未翻开先翻
+    var dir = g === 2 ? 1 : (g === 0 ? -1 : 0);
+    commitGrade(g, dir, 0, 0);
+  }
+
+  function reveal() {
+    if (revealed || flyAxis) return;
+    revealed = true;
+    renderStudy();          // 释义区带 .vw-reveal 入场动画
+  }
 
   function bindSwipe() {
     var host = $('vocab-study');
+
     host.addEventListener('pointerdown', function (e) {
       if (mode !== 'study' || e.isPrimary === false) return;
       if (e.target.closest('button')) return;
-      swipe.active = true;
-      swipe.engaged = false;
-      swipe.x0 = e.clientX;
-      swipe.y0 = e.clientY;
+      if (flyAxis) return;                        // 上一张还在飞出，不接新手势
+      if (backAxis) { backAxis.kill(); backAxis = null;   // 抓住弹回中的卡片（§3）
+        var c0 = wordCardEl();
+        if (c0) c0.classList.remove('springing');
+      }
+      gest.active = true;
+      gest.engaged = false;
+      gest.axis = null;
+      gest.pointerId = e.pointerId;
+      gest.x0 = e.clientX;
+      gest.y0 = e.clientY;
+      gest.dx = 0;
+      gest.dy = 0;
+      if (!gest.tracker) gest.tracker = new Spring.Tracker();
+      gest.tracker.reset();
+      gest.tracker.push(0, e.timeStamp || performance.now());
     });
+
     window.addEventListener('pointermove', function (e) {
-      if (!swipe.active) return;
-      var dx = e.clientX - swipe.x0;
-      var dy = e.clientY - swipe.y0;
-      if (!swipe.engaged) {
-        if (Math.abs(dx) < 40 && Math.abs(dy) < 40) return;
-        swipe.engaged = true;
+      if (!gest.active || e.pointerId !== gest.pointerId) return;
+      var dx = e.clientX - gest.x0;
+      var dy = e.clientY - gest.y0;
+      if (!gest.engaged) {
+        if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+        gest.engaged = true;
+        // 并行检测两个方向的意图，谁大锁谁（§10），落选方向不再参与
+        gest.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+        var c1 = wordCardEl();
+        if (c1) c1.style.animation = 'none';      // 入场动画让位给手势
+        try { host.setPointerCapture(e.pointerId); } catch (err) { /* 忽略 */ }
       }
+      gest.dx = dx;
+      gest.dy = dy;
+      gest.tracker.push(gest.axis === 'x' ? dx : dy, e.timeStamp || performance.now());
+      renderDrag(dx, dy);
     });
-    window.addEventListener('pointerup', function (e) {
-      if (!swipe.active) return;
-      var dx = e.clientX - swipe.x0;
-      var dy = e.clientY - swipe.y0;
-      swipe.active = false;
-      if (!swipe.engaged) return;                    // 普通点按走 click
-      if (Math.abs(dx) < 40 && Math.abs(dy) < 40) return;
-      if (Math.abs(dy) > Math.abs(dx)) {
-        if (dy < -40 && !revealed) reveal();
-      } else if (dx > 40) {
-        if (revealed) gradeCurrentCard(2);
-      } else if (dx < -40) {
-        if (revealed) gradeCurrentCard(0);
+
+    function up(e, cancelled) {
+      if (!gest.active || e.pointerId !== gest.pointerId) return;
+      gest.active = false;
+      if (!gest.engaged) return;                  // 普通点按走 click
+      var dx = gest.dx, dy = gest.dy;
+      var v = cancelled ? 0 : gest.tracker.velocity();
+
+      if (gest.axis === 'x') {
+        if (revealed) {
+          var W = ($('vocab-study').clientWidth || 360);
+          var dir = (Math.abs(dx) > 2 ? Math.sign(dx) : (Math.sign(v) || 1));
+          var passed = Math.abs(dx) > W * 0.32;                    // 拖过三分之一
+          var flung = Math.abs(v) > 420 && Math.sign(v) === dir;   // 或一记快甩（速度优先 §5）
+          if (passed || flung) commitGrade(dir > 0 ? 2 : 0, dir, v, dx);
+          else springBack();
+        } else {
+          springBack();               // 未翻开：阻力位移回弹，暗示先看释义
+        }
+      } else if (gest.axis === 'y') {
+        if (!revealed && !cancelled && (dy < -70 || v < -420)) {
+          springBack();
+          if (backAxis) backAxis.onSettle = (function (prev) {
+            return function () {
+              if (prev) prev();
+              if (mode === 'study' && !revealed && !flyAxis) reveal();
+            };
+          })(backAxis.onSettle);
+        } else {
+          springBack();
+        }
       }
-    });
-  }
-
-  /* ==================== 动作 ==================== */
-
-  function reveal() {
-    if (revealed) return;
-    revealed = true;
-    renderStudy();
-  }
-
-  function gradeCurrentCard(g) {
-    if (!revealed && mode === 'study') { reveal(); return; }   // 未翻开先翻
-    var r = Vocab.gradeCurrent(g);
-    revealed = false;
-    if (r && r.finished) renderFinish();
-    else renderStudy();
+    }
+    window.addEventListener('pointerup', function (e) { up(e, false); });
+    window.addEventListener('pointercancel', function (e) { up(e, true); });
   }
 
   /* ==================== 初始化（只跑一次） ==================== */
@@ -651,7 +960,11 @@ var VocabUI = (function () {
       if (a === 'start') startStudy();
       else if (a === 'triage') startTriage();
       else if (a === 'test') startTestSetup();
-      else if (a === 'toggle-settings') $('vocab-settings').classList.toggle('hidden');
+      else if (a === 'toggle-settings') {
+        var s = $('vocab-settings');
+        if (s.classList.contains('hidden')) { s.classList.remove('hidden'); popIn(s); }
+        else s.classList.add('hidden');
+      }
     });
 
     // 设置项（委托，重绘后仍有效）
@@ -710,6 +1023,12 @@ var VocabUI = (function () {
         if (a === 'test-begin') { startTest(testRange, testSize); return; }
         if (a === 'test-next') { if (test && test.locked) nextTestItem(); return; }
         if (a === 'test-drill') { drillWrong(); return; }
+        if (a === 'wrong-toggle') {
+          var more = $('vw-rows-more');
+          if (more) more.classList.remove('hidden');
+          act.parentNode.removeChild(act);
+          return;
+        }
         if (a === 'speak') {
           var c = Vocab.currentCard();
           if (c) speak(c.entry.word);
@@ -743,6 +1062,14 @@ var VocabUI = (function () {
 
     bindSwipe();
 
+    // Android 返回键：退出会话而不是退出应用（进度由会话续学机制保留）
+    window.addEventListener('popstate', function () {
+      if (backPushed) {
+        backPushed = false;
+        if (mode) exitSession(true);
+      }
+    });
+
     // 键盘：空格翻面 / 1·2·3 评分 / 1–4 答题 / Esc 退出
     document.addEventListener('keydown', function (e) {
       if (mode === null) return;
@@ -759,5 +1086,9 @@ var VocabUI = (function () {
     });
   }
 
-  return { init: init, render: render };
+  return {
+    init: init,
+    render: render,
+    sessionActive: sessionActive
+  };
 })();

@@ -29,9 +29,10 @@ var LifeUI = (function () {
   var editFreq = 'daily';         // 打卡弹窗频率：'daily' | {type:'weekly',times:N}
   var confettiShownDate = null;   // 撒花每天只放一次
 
-  /** 卡片滑动手势状态 */
+  /** 卡片滑动手势状态（tracker/axis 延迟创建：spring.js 在本文件之后加载） */
   var drag = { active: false, dragging: false, pointerId: -1,
-    startX: 0, startY: 0, dx: 0, width: 1, suppressClick: false };
+    startX: 0, startY: 0, dx: 0, width: 1, suppressClick: false,
+    basePx: 0, tracker: null, axis: null };
 
   /* ==================== 小工具 ==================== */
 
@@ -82,13 +83,11 @@ var LifeUI = (function () {
 
   var SEG_INDEX = { days: 0, vocab: 1, diet: 2 };
 
-  /** 切分段：不跳页，内容原地替换；--life-seg 驱动滑动胶囊（0/1/2 三档） */
+  /** 切分段：不跳页，内容交叉淡入替换（与页面切换同一套节奏）；--life-seg 驱动滑动胶囊 */
   function setSegment(mod) {
     if (SEG_INDEX[mod] === undefined) mod = 'days';
+    var prev = currentMod;
     currentMod = mod;
-    $('life-days').classList.toggle('hidden', mod !== 'days');
-    $('life-vocab').classList.toggle('hidden', mod !== 'vocab');
-    $('life-diet').classList.toggle('hidden', mod !== 'diet');
     var seg = $('life-seg');
     seg.style.setProperty('--life-seg', String(SEG_INDEX[mod]));
     var btns = seg.querySelectorAll('.life-seg-btn');
@@ -96,7 +95,14 @@ var LifeUI = (function () {
       btns[i].classList.toggle('active', btns[i].getAttribute('data-mod') === mod);
     }
     saveSeg();
-    render();
+    if (mod === prev) { render(); return; }
+    var outEl = $('life-' + prev);
+    var inEl = $('life-' + mod);
+    window.fadeSwap(outEl, inEl, function () {
+      outEl.classList.add('hidden');
+      inEl.classList.remove('hidden');
+      render();
+    });
   }
 
   /* ==================== 日子：卡片切换器 ==================== */
@@ -175,12 +181,135 @@ var LifeUI = (function () {
     dots.classList.toggle('hidden', count < 2);
   }
 
-  /** 把轨道摆到 dayIdx 的位置；animate=false 用于重绘后直接落位 */
+  /** 把轨道摆到 dayIdx 的位置；animate=false 用于重绘后直接落位。
+      用 px 而非 -90%：translateX 的百分比基准是轨道边盒（含 7% 内边距），
+      与卡片实际间距（90% × 内容盒）每步差约 45px，滑多了会明显漂移。 */
   function applyTrack(animate) {
+    killTrackAxis();
     var track = $('day-track');
     if (!track) return;
     track.classList.toggle('anim', !!animate);
-    track.style.transform = 'translateX(' + (-dayIdx * 90) + '%)';
+    track.style.transform = 'translateX(' + (-dayIdx * trackUnit()).toFixed(1) + 'px)';
+  }
+
+  /* ==================== 卡片滑动手势 ==================== */
+  /* 与底栏玻璃块同一套物理：拖动 1:1 跟手 → 松手按动量投射选目标卡（§6）→
+     弹簧从当前呈现值出发并继承松手速度（§5）；越界渐进橡皮筋（§9）；
+     滑行中随时可以再抓住（§3 可打断）。 */
+
+  /** 一张卡在轨道里的真实步长（px）：直接量相邻卡片的间距。
+      translate 是均匀平移，不影响间距；量不出来时按 0.774×舞台宽兜底
+      （0.86 卡宽 + 0.04 间隙，均以去掉 7% 内边距后的内容盒为基准）。 */
+  function trackUnit() {
+    var track = $('day-track');
+    var cards = track ? track.querySelectorAll('.day-card') : null;
+    if (cards && cards.length >= 2) {
+      var u = cards[1].getBoundingClientRect().x - cards[0].getBoundingClientRect().x;
+      if (u > 10) return u;
+    }
+    var stage = $('day-stage');
+    return 0.774 * ((stage && stage.clientWidth) || 358);
+  }
+
+  function killTrackAxis() {
+    if (!drag.axis) return;
+    drag.axis.kill();
+    drag.axis = null;
+    var track = $('day-track');
+    if (track) track.classList.remove('springing');
+  }
+
+  /** 越界渐进阻尼：第一张往右 / 最后一张往左，越拖越「顶」而不是硬停 */
+  function resistedDayPx(dx) {
+    var raw = drag.basePx + dx;
+    var min = -(cardCount - 1) * trackUnit();
+    if (raw > 0) return Spring.rubberband(raw, drag.width);
+    if (raw < min) return min - Spring.rubberband(min - raw, drag.width);
+    return raw;
+  }
+
+  /** 弹簧把轨道送到第 idx 张：从呈现值 fromPx 出发、继承松手速度 v（§5 交接） */
+  function springTrackTo(idx, fromPx, v) {
+    var track = $('day-track');
+    if (!track) return;
+    killTrackAxis();
+    track.classList.add('springing');          // 关掉 CSS 过渡：位置由弹簧逐帧接管
+    var preset = Math.abs(v) > 240 ? Spring.PRESET.momentum : Spring.PRESET.move;
+    drag.axis = new Spring.Axis({
+      from: fromPx,
+      velocity: v,
+      damping: preset.damping,
+      response: preset.response,
+      onUpdate: function (x) {
+        track.style.transform = 'translateX(' + x.toFixed(1) + 'px)';
+      },
+      onSettle: function () {
+        drag.axis = null;
+        track.classList.remove('springing');
+        // 弹簧终值与定位值等位，写回无跳变
+        track.style.transform = 'translateX(' + (-idx * trackUnit()).toFixed(1) + 'px)';
+      }
+    });
+    drag.axis.set(-idx * trackUnit());
+  }
+
+  function bindSwipe() {
+    var stage = $('day-stage');
+    var track = $('day-track');
+
+    stage.addEventListener('pointerdown', function (e) {
+      if (e.isPrimary === false || cardCount < 2) return;
+      killTrackAxis();                     // 抓住一个还在滑行的轨道：从当前值接续（§3）
+      drag.active = true;
+      drag.dragging = false;
+      drag.pointerId = e.pointerId;
+      drag.startX = e.clientX;
+      drag.startY = e.clientY;
+      drag.dx = 0;
+      drag.width = stage.clientWidth || 1;
+      drag.basePx = -dayIdx * trackUnit();
+      if (!drag.tracker) drag.tracker = new Spring.Tracker();
+      drag.tracker.reset();
+      drag.tracker.push(0, e.timeStamp || performance.now());
+    });
+
+    window.addEventListener('pointermove', function (e) {
+      if (!drag.active || e.pointerId !== drag.pointerId) return;
+      var dx = e.clientX - drag.startX;
+      var dy = e.clientY - drag.startY;
+      if (!drag.dragging) {
+        if (Math.abs(dx) < 12 || Math.abs(dx) <= Math.abs(dy)) return;
+        drag.dragging = true;
+        stage.classList.add('dragging');
+        track.classList.remove('anim');
+        try { stage.setPointerCapture(drag.pointerId); } catch (err) { /* 忽略 */ }
+      }
+      drag.dx = dx;
+      drag.tracker.push(dx, e.timeStamp || performance.now());
+      track.style.transform = 'translateX(' + resistedDayPx(dx).toFixed(1) + 'px)';
+    });
+
+    function end(e, cancelled) {
+      if (!drag.active || (e && e.pointerId !== drag.pointerId)) return;
+      drag.active = false;
+      if (!drag.dragging) return;
+      drag.dragging = false;
+      stage.classList.remove('dragging');
+
+      var fromPx = resistedDayPx(drag.dx);          // 松手时的呈现位置
+      var v = cancelled ? 0 : drag.tracker.velocity();   // px/s，与轨道同向
+
+      // 动量投射：按「本来会滑到哪」选目标卡（§6）——快甩与慢拖落点不同
+      var landed = fromPx + Spring.project(v, 0.99);
+      var idx = Math.max(0, Math.min(cardCount - 1, Math.round(-landed / trackUnit())));
+      dayIdx = idx;
+      updateDots(cardCount);
+      drag.suppressClick = true;
+      setTimeout(function () { drag.suppressClick = false; }, 300);
+      springTrackTo(idx, fromPx, v);
+    }
+    window.addEventListener('pointerup', function (e) { end(e, false); });
+    window.addEventListener('pointercancel', function (e) { end(e, true); });
   }
 
   function renderDays() {
@@ -296,8 +425,12 @@ var LifeUI = (function () {
       toast(e.message);
       return;
     }
-    if (nowDone) flash('已打卡 ✓');
-    else toast('已撤销打卡');
+    if (nowDone) {
+      Spring.haptic(8);              // 与勾选动画同帧：勾选是值得确认的时刻（§13）
+      flash('已打卡 ✓');
+    } else {
+      toast('已撤销打卡');
+    }
     renderHabits();
     if (window.refreshReminders) window.refreshReminders();
   }
@@ -584,60 +717,6 @@ var LifeUI = (function () {
     if (window.refreshReminders) window.refreshReminders();
   }
 
-  /* ==================== 卡片滑动手势 ==================== */
-
-  function bindSwipe() {
-    var stage = $('day-stage');
-    var track = $('day-track');
-
-    stage.addEventListener('pointerdown', function (e) {
-      if (e.isPrimary === false || cardCount < 2) return;
-      drag.active = true;
-      drag.dragging = false;
-      drag.pointerId = e.pointerId;
-      drag.startX = e.clientX;
-      drag.startY = e.clientY;
-      drag.dx = 0;
-      drag.width = stage.clientWidth || 1;
-    });
-
-    window.addEventListener('pointermove', function (e) {
-      if (!drag.active || e.pointerId !== drag.pointerId) return;
-      var dx = e.clientX - drag.startX;
-      var dy = e.clientY - drag.startY;
-      if (!drag.dragging) {
-        if (Math.abs(dx) < 12 || Math.abs(dx) <= Math.abs(dy)) return;
-        drag.dragging = true;
-        stage.classList.add('dragging');
-        track.classList.remove('anim');
-        try { stage.setPointerCapture(drag.pointerId); } catch (err) { /* 忽略 */ }
-      }
-      drag.dx = dx;
-      // 边缘阻尼：第一张往右 / 最后一张往左时给 1/3 手感
-      var eff = dx;
-      if ((dayIdx === 0 && dx > 0) || (dayIdx === cardCount - 1 && dx < 0)) eff = dx / 3;
-      var base = -dayIdx * 0.9 * drag.width;
-      track.style.transform = 'translateX(' + (base + eff) + 'px)';
-    });
-
-    function end(e) {
-      if (!drag.active || (e && e.pointerId !== drag.pointerId)) return;
-      drag.active = false;
-      if (!drag.dragging) return;
-      drag.dragging = false;
-      stage.classList.remove('dragging');
-      var threshold = drag.width * 0.16;
-      if (drag.dx <= -threshold && dayIdx < cardCount - 1) dayIdx += 1;
-      else if (drag.dx >= threshold && dayIdx > 0) dayIdx -= 1;
-      drag.suppressClick = true;
-      setTimeout(function () { drag.suppressClick = false; }, 300);
-      applyTrack(true);
-      updateDots(cardCount);
-    }
-    window.addEventListener('pointerup', end);
-    window.addEventListener('pointercancel', end);
-  }
-
   /* ==================== 初始化与事件绑定（只跑一次） ==================== */
 
   function init() {
@@ -757,6 +836,7 @@ var LifeUI = (function () {
     render: render,
     setSegment: setSegment,
     currentSeg: currentSeg,
-    refreshBadge: refreshBadge
+    refreshBadge: refreshBadge,
+    confettiHTML: confettiHTML       // 背单词完成页复用同一套撒花
   };
 })();

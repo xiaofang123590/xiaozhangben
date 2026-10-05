@@ -148,7 +148,40 @@ function resetViewStyles(el) {
   el.style.transform = '';
 }
 
+/**
+ * 内容交叉淡入（fadeSwap）：出场 130ms → swap() 换内容 → 入场 190ms。
+ * 与 switchView 同一套节奏参数；不位移页面级元素，只动被替换的内容块。
+ * outEl 可为 null（纯入场）；减弱动态时直接执行 swap。
+ */
+window.fadeSwap = function (outEl, inEl, swap) {
+  if (Spring.reduced) { swap(); return; }
+  var hasOut = !!(outEl && outEl !== inEl && !outEl.classList.contains('hidden'));
+  if (hasOut) {
+    outEl.style.transition = 'opacity 130ms ease-in';
+    outEl.style.opacity = '0';
+  }
+  setTimeout(function () {
+    if (hasOut) resetViewStyles(outEl);
+    swap();
+    if (inEl) inEl.classList.remove('hidden');
+    if (inEl && !inEl.classList.contains('hidden')) {
+      inEl.style.transition = 'none';
+      inEl.style.opacity = '0';
+      inEl.style.transform = 'scale(0.99)';
+      void inEl.offsetWidth;
+      inEl.style.transition = 'opacity 190ms ease-out, transform 250ms cubic-bezier(0.22, 1, 0.36, 1)';
+      inEl.style.opacity = '1';
+      inEl.style.transform = 'scale(1)';
+      setTimeout(function () { resetViewStyles(inEl); }, 270);
+    }
+  }, hasOut ? 130 : 0);
+};
+
 function switchView(view) {
+  // 学习会话是专注态：层盖住底栏，任何切页入口（含全局内容拖动手势的兜底）
+  // 都不该能打断它——先退出会话再切页
+  if (window.VocabUI && VocabUI.sessionActive && VocabUI.sessionActive()) return;
+
   var main = $('app-main');
   if (main) viewScrollTop[scrollKeyOf(currentView)] = main.scrollTop;   // 记住离开时的位置
 
@@ -182,7 +215,9 @@ function switchView(view) {
   var bar = $('tab-bar');
   if (bar && nextIdx >= 0) bar.style.setProperty('--tab-index', String(nextIdx));
 
+  // 首页的标题就是问候语（home-head），通用词「首页」不再重复占一行
   $('page-title').textContent = VIEW_TITLES[view];
+  $('page-title').classList.toggle('hidden', view === 'home');
   $('month-nav').classList.toggle('hidden', view === 'manage' || view === 'life' || view === 'home');
 
   if (view === 'home') HomeUI.render();
@@ -1199,6 +1234,10 @@ function showNotifyPop() {
   var alerts = Alerts.collect();
   var top = alerts[0];
   if (!top || top.level === 'none') return;    // 没有通知就保持安静
+  // 首页的通知中心就是全部提醒，再弹悬浮横幅纯属重复（§1 Purpose）；
+  // 背单词会话是专注态，弹窗即打断（§3）——两种情况都不弹，角标与通知中心永远在。
+  if (currentView === 'home') return;
+  if (window.VocabUI && VocabUI.sessionActive && VocabUI.sessionActive()) return;
   var pop = $('notify-pop');
   popTarget = top.go || null;
   pop.className = 'banner banner-' + top.level;

@@ -3930,7 +3930,7 @@ body[data-mode="dark"] .accent-card[data-accent="sakura"] .accent-preview {
   background: var(--surface);
   box-shadow: 0 1px 6px rgba(var(--primary-rgb), 0.16), inset 0 0 0 1px var(--line);
   transform: translateX(calc(var(--life-seg, 0) * 100%));
-  transition: transform 0.38s cubic-bezier(0.3, 1.36, 0.42, 1);
+  transition: transform 0.36s cubic-bezier(0.22, 1, 0.36, 1);   /* 点按切换无动量，不回弹（§4） */
   pointer-events: none;
 }
 .life-seg-btn {
@@ -3967,7 +3967,8 @@ body[data-mode="dark"] .accent-card[data-accent="sakura"] .accent-preview {
   padding: 0 7%;
   will-change: transform;
 }
-.day-track.anim { transition: transform 0.48s cubic-bezier(0.22, 1.12, 0.36, 1); }
+.day-track.anim { transition: transform 0.44s cubic-bezier(0.22, 1, 0.36, 1); }
+.day-track.springing { transition: none; }   /* 弹簧接管期间：位置由 js 逐帧写入 */
 
 .day-card {
   flex: 0 0 86%;
@@ -4255,22 +4256,26 @@ body[data-mode="dark"] .accent-card[data-accent="sakura"] .accent-preview {
   .life-seg-indicator { transition: none; }
   .habit-check.done { animation: none; }
   .habit-row.habit-justdone { animation: none; }
+  /* 会话层的内容进场 / 答错抖动：减弱动态下不再位移，只保留状态变化 */
+  .q-enter, .vw-reveal, .vocab-opt.wrong-pick { animation: none !important; }
 }
 /* ----------------------------------------------------------------------
    40. 首页（通知中心 + 分区入口 + 快捷动作）
    ---------------------------------------------------------------------- */
 
-.home-head { padding: 6px 2px 2px; }
+.home-head { padding: 2px 2px 0; }
+/* 问候语就是首页的页面标题（顶栏通用词「首页」在首页隐藏）——按英雄级排版（§15） */
 .home-greet {
   margin: 0;
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
+  font-size: var(--num-hero-size);
+  line-height: 1.18;
+  font-weight: 800;
+  letter-spacing: -0.02em;
   color: var(--title-color);
 }
 .home-date {
-  margin: 4px 0 0;
-  font-size: 13px;
+  margin: 5px 0 0;
+  font-size: var(--fs-sub);
   color: var(--text-grey);
 }
 
@@ -4480,16 +4485,6 @@ body[data-mode="dark"] .accent-card[data-accent="sakura"] .accent-preview {
   padding: 6px 0 10px;
 }
 .vocab-deck-count { font-size: 12px; color: var(--text-grey); }
-.vocab-exam {
-  display: inline-block;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: rgba(var(--primary-rgb), 0.12);
-  color: var(--primary-deep);
-  font-size: 12px;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
 .vocab-task-line { font-size: 14px; color: var(--text-sub); margin: 4px 0; }
 .vocab-task-line b { color: var(--text-main); font-variant-numeric: tabular-nums; }
 .vocab-task-btn { margin-top: 10px; }
@@ -4558,15 +4553,60 @@ body[data-mode="dark"] .accent-card[data-accent="sakura"] .accent-preview {
 .vocab-stat-cell b { font-size: 17px; color: var(--text-main); font-variant-numeric: tabular-nums; }
 .vocab-stat-cell span { font-size: 11px; color: var(--text-grey); }
 
-/* ---- 学习会话 ---- */
-.vocab-session-card { min-height: 60vh; }
-.vocab-session-top {
+/* ---- 学习会话层：#vocab-study 全屏专注层（盖住顶栏与底栏，进出同路径弹簧） ---- */
+#vocab-study {
+  position: fixed;
+  inset: 0;
+  z-index: 70;                 /* 高于顶栏(40)/简报(45)/弹窗遮罩(50)，低于 toast(200) */
+  display: flex;
+  flex-direction: column;
+  max-width: 480px;            /* 桌面端与 #app 同宽 */
+  margin: 0 auto;
+  background: var(--bg-page);
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 16px calc(14px + env(safe-area-inset-bottom, 0px));
+}
+.vs-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
-  margin-bottom: 12px;
+  padding: 2px 0 12px;
 }
+/* 细进度条贴顶：给「进展」以连续上下文，计数只作辅助（§6） */
+.vs-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.vs-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--primary);
+  transition: width 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.vs-spring { flex: 1; }
+.vs-count {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--text-grey);
+  font-variant-numeric: tabular-nums;
+}
+/* 垂直居中 + 内容超出时可滚动不裁顶（margin:auto 的经典解法）；
+   overflow-x 收掉：卡片飞出动画的位移不撑出横向滚动条 */
+.vs-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+}
+.vs-center { margin: auto 0; }
+.vs-center .vocab-next { width: 100%; margin-top: 12px; }
+
 .vocab-exit {
   display: inline-flex;
   align-items: center;
@@ -4579,7 +4619,6 @@ body[data-mode="dark"] .accent-card[data-accent="sakura"] .accent-preview {
   border-radius: 10px;
 }
 .vocab-exit:active { background: var(--bg-input); }
-.vocab-progress { font-size: 13px; color: var(--text-grey); font-variant-numeric: tabular-nums; }
 .vocab-speak {
   width: 34px;
   height: 34px;
@@ -4662,7 +4701,7 @@ body[data-mode="dark"] .accent-card[data-accent="sakura"] .accent-preview {
 .grade-btn.g2 { color: var(--primary-deep); box-shadow: inset 0 0 0 1.5px rgba(var(--primary-rgb), 0.5); }
 
 .vocab-keys { text-align: center; margin: 12px 0 0; }
-.vocab-finish { text-align: center; padding: 30px 0 20px; color: var(--text-grey); }
+.vocab-finish { position: relative; text-align: center; padding: 30px 0 20px; color: var(--text-grey); }
 .vocab-finish .empty-title { margin: 10px 0 4px; }
 .vocab-finish .btn-primary { margin-top: 18px; }
 .vocab-finish-sub { margin: 0; font-size: 14px; color: var(--text-sub); }
@@ -4798,3 +4837,129 @@ body[data-mode="dark"] .accent-card[data-accent="sakura"] .accent-preview {
 .vocab-eta-ok { color: var(--primary-deep); }
 .vocab-eta-ok b { color: var(--primary-deep); }
 .vocab-eta-bad { color: #C96D14; }
+
+/* ----------------------------------------------------------------------
+   43. 本轮改造：会话层配套（手势角标 / 备考数字排版 / 结算环 / 内容进场）
+   ---------------------------------------------------------------------- */
+
+/* ---- 43.1 今日任务卡：备考联动（大数字 + 两行辅注 + 一行结论，§15） ---- */
+.vocab-exam-block {
+  margin: 2px 0 12px;
+  padding: 12px 14px 11px;
+  border-radius: 14px;
+  background: rgba(var(--primary-rgb), 0.07);
+  box-shadow: inset 0 0 0 1px rgba(var(--primary-rgb), 0.14);
+}
+.vocab-exam-row { display: flex; align-items: baseline; gap: 8px; }
+.vocab-exam-ic { font-size: 18px; align-self: center; }
+.vocab-exam-name {
+  font-size: var(--fs-sub);
+  color: var(--text-sub);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vocab-exam-days {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  font-size: var(--fs-meta);
+  color: var(--text-grey);
+  font-variant-numeric: tabular-nums;
+}
+.vocab-exam-days b {
+  font-size: 1.875rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--primary-deep);
+}
+.vocab-exam-meta { margin-top: 7px; font-size: var(--fs-meta); color: var(--text-sub); }
+.vocab-exam-meta b { color: var(--text-main); font-variant-numeric: tabular-nums; }
+.vocab-exam-eta { margin-top: 4px; font-size: var(--fs-meta); color: var(--text-grey); }
+.vocab-exam-eta.ok { color: var(--primary-deep); }
+.vocab-exam-eta.bad { color: #C96D14; }
+
+/* ---- 43.2 学习卡手势：滑动评分意图角标（透明度由手势逐帧驱动） ---- */
+.vocab-swipe-zone { position: relative; }
+.grade-hint {
+  position: absolute;
+  top: 18px;
+  z-index: 2;
+  padding: 5px 12px;
+  border-radius: 10px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  letter-spacing: 1px;
+  opacity: 0;
+  pointer-events: none;
+  background: var(--surface);
+}
+.grade-hint.gh-left {
+  left: 14px;
+  color: var(--danger);
+  box-shadow: inset 0 0 0 2px var(--danger);
+  transform: rotate(-8deg);
+}
+.grade-hint.gh-right {
+  right: 14px;
+  color: var(--primary-deep);
+  box-shadow: inset 0 0 0 2px var(--primary);
+  transform: rotate(8deg);
+}
+.vocab-word-card.springing { transition: none; }   /* 弹簧接管期间：位移逐帧写入 */
+
+/* ---- 43.3 内容进场（换词/换题/换屏/答错抖动）：非手势路径的材质化出现 ---- */
+@keyframes vocabCardIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.q-enter { animation: vocabCardIn 0.24s cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes vwRevealIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.vw-reveal { animation: vwRevealIn 0.22s ease-out; }
+.vw-reveal.vr-grade { animation-delay: 0.05s; animation-fill-mode: backwards; }
+@keyframes optShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  55% { transform: translateX(4px); }
+  80% { transform: translateX(-2px); }
+}
+.vocab-opt.wrong-pick { animation: optShake 0.3s ease-out; }
+
+/* ---- 43.4 测试结算：正确率环（计数与描边同一帧驱动）+ 收折错题 ---- */
+.vr-result { width: 148px; height: 148px; margin: 0 auto; }
+.vr-result .vr-bg,
+.vr-result .vr-fg { stroke-width: 9; }
+.vr-result .vr-pct {
+  font-size: 27px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  fill: var(--text-main);
+  text-anchor: middle;
+  font-variant-numeric: tabular-nums;
+}
+.vr-result.good .vr-fg { stroke: var(--primary); }
+.vr-result.bad .vr-fg { stroke: var(--danger); }
+.vr-result:not(.good):not(.bad) .vr-fg { stroke: #E8842B; }
+.vr-wrap { display: flex; flex-direction: column; align-items: center; width: 100%; }
+.vr-wrap .vocab-wrong-list { width: 100%; }
+.vr-actions { display: flex; gap: 10px; margin-top: 20px; width: 100%; }
+.vr-actions .btn-primary,
+.vr-actions .btn-secondary { flex: 1; }
+.vw-more-btn {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  color: var(--primary-deep);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+}
+.vw-more-btn:active { background: var(--bg-input); }
+
+/* ---- 43.5 测试设置卡 ---- */
+.vocab-setup-card { width: 100%; }
