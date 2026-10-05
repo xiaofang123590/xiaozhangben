@@ -35,6 +35,18 @@
       "description": "直达统计页",
       "url": "./index.html?view=stats",
       "icons": [{ "src": "icons/shortcut-stats.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "背单词",
+      "short_name": "背单词",
+      "description": "直达背单词分段，继续今日任务",
+      "url": "./index.html?view=life&mod=vocab"
+    },
+    {
+      "name": "看日子",
+      "short_name": "看日子",
+      "description": "直达纪念日/倒计时与打卡计划",
+      "url": "./index.html?view=life&mod=days"
     }
   ],
   "share_target": {

@@ -16,11 +16,14 @@ var VocabUI = (function () {
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
-  var mode = null;          // null | 'study' | 'triage'
+  var mode = null;          // null | 'study' | 'triage' | 'test-setup' | 'test' | 'test-result'
   var revealed = false;     // 学习卡是否已翻开
   var triage = null;        // { queue:[idx], pos, total }
   var studyTask = null;     // buildToday() 返回的任务信息
   var toastTimer = 0;
+  var testRange = 'today';  // 测试设置页当前范围
+  var testSize = 20;        // 测试设置页当前题量
+  var test = null;          // { items,pos,correct,wrong,start,kind,key,locked }
 
   function toast(msg) {
     var t = $('toast');
@@ -47,7 +50,10 @@ var VocabUI = (function () {
   /* ==================== 常态：今日任务 + 统计 + 设置 ==================== */
 
   function render() {
-    if (mode === 'study' || mode === 'triage') return;   // 会话接管中不被重绘打断
+    if (mode === 'study' || mode === 'triage' || mode === 'test-setup' ||
+        mode === 'test' || mode === 'test-result') {
+      return;                        // 会话/测试接管中不被重绘打断
+    }
     renderMain();
   }
 
@@ -65,17 +71,24 @@ var VocabUI = (function () {
     var deckName = deck === 'cet6' ? '六级' : '四级';
     var deckSizes = (window.VOCAB_DB && VOCAB_DB[deck]) ? VOCAB_DB[deck].length : 0;
 
-    // 备考目标：绑定的考试事件
-    var examLine = '';
+    // 备考联动：绑定考试 → 倒计时 + 剩余词 + 建议每日 + 速度预测
+    var examHTML = '';
     if (v.settings.examEventId && window.Days) {
-      var evs = Store.getDays().events;
-      for (var i = 0; i < evs.length; i++) {
-        if (evs[i].id === v.settings.examEventId) {
-          var c = Days.eventCountdown(evs[i], Store.todayStr());
-          examLine = '<span class="vocab-exam">' + esc(evs[i].icon || '🎓') + ' 距「' +
-            esc(evs[i].title) + '」' + (c.today ? '就是今天' : (c.past ? '已过 ' + c.n : c.n) + ' 天') + '</span>';
-          break;
+      var ep = Vocab.examProgress();
+      if (ep) {
+        var dayTxt = ep.today ? '就是今天' : (ep.past ? '已过 ' + ep.daysLeft : '还有 ' + ep.daysLeft + ' 天');
+        var lines = '<span class="vocab-exam">' + esc(ep.icon) + ' 距「' + esc(ep.title) + '」' + dayTxt + '</span>' +
+          '<div class="vocab-task-line">剩余 <b>' + ep.remaining + '</b> 词' +
+          (ep.perDay ? ' · 建议每日 <b>' + ep.perDay + '</b> 词' : '') + '</div>';
+        if (ep.etaDays !== null && !ep.past && !ep.today) {
+          lines += ep.etaDays <= ep.daysLeft
+            ? '<div class="vocab-task-line vocab-eta-ok">近 7 天均速 ' + ep.speed + ' 词/天 · 按当前速度考前可完成 ✓</div>'
+            : '<div class="vocab-task-line vocab-eta-bad">近 7 天均速 ' + ep.speed + ' 词/天 · 按当前速度考前还差约 ' +
+              Math.max(1, ep.remaining - Math.floor(ep.speed * ep.daysLeft)) + ' 词</div>';
+        } else if (ep.speed === 0 && ep.remaining > 0 && !ep.past) {
+          lines += '<div class="vocab-task-line">近 7 天还没学新词，今天开始吧</div>';
         }
+        examHTML = lines;
       }
     }
 
@@ -92,7 +105,7 @@ var VocabUI = (function () {
         '<div class="vocab-task-body">' +
           ringHTML(prev.done, prev.total, '/' + prev.total) +
           '<div class="vocab-task-info">' +
-            examLine +
+            examHTML +
             '<div class="vocab-task-line">待复习 <b>' + Math.min(prev.due, v.settings.reviewCap) + '</b> · ' +
               '新词还剩 <b>' + prev.newLeft + '</b></div>' +
             '<div class="vocab-task-line">今日已学 新 <b>' + ts.isNewToday + '</b> / 复习 <b>' + ts.isReviewToday + '</b>' +
@@ -103,7 +116,9 @@ var VocabUI = (function () {
         '</div>' +
         '<div class="vocab-quick-row">' +
           '<button type="button" class="btn-secondary btn-sm" data-act="triage">' +
-            Icons.svg('check-circle', 'ic-sm') + '快速筛选已掌握</button>' +
+            Icons.svg('check-circle', 'ic-sm') + '快速筛选</button>' +
+          '<button type="button" class="btn-secondary btn-sm" data-act="test">' +
+            Icons.svg('edit', 'ic-sm') + '测试</button>' +
           '<button type="button" class="btn-secondary btn-sm" data-act="toggle-settings">' +
             Icons.svg('budget', 'ic-sm') + '学习设置</button>' +
         '</div>' +
@@ -126,6 +141,13 @@ var VocabUI = (function () {
             '<input id="vocab-cap-input" type="number" inputmode="numeric" min="0" max="500" step="10" value="' +
               v.settings.reviewCap + '"></div>' +
         '</div>' +
+        '<div class="form-row"><label class="form-label">每日自检题量</label>' +
+          '<div class="chip-row" id="vocab-checksize-chips">' +
+            [10, 20, 30, 50].map(function (n) {
+              return '<button type="button" class="chip' + (v.settings.checkSize === n ? ' active' : '') +
+                '" data-checksize="' + n + '">' + n + ' 题</button>';
+            }).join('') +
+          '</div></div>' +
         '<div class="form-row"><label class="form-label">备考目标（显示倒计时）</label>' +
           '<select id="vocab-exam-select"><option value="">不绑定</option></select></div>' +
         '<div class="form-row"><label class="form-label">完成自动打卡</label>' +
@@ -140,10 +162,43 @@ var VocabUI = (function () {
           statCell('已掌握', st.mastered) + statCell('生词本', st.bookmarks) +
           statCell('错词本', st.wrong) +
         '</div>' +
-        '<p class="hint">「已掌握」= 复习周期到 30 天以上的词 + 快速筛选标记的词。测试与曲线在下一阶段加入。</p>' +
+        historyHTML() +
+        '<p class="hint">「已掌握」= 复习周期到 30 天以上的词 + 快速筛选标记的词。</p>' +
       '</div>';
 
     fillSelects(v);
+  }
+
+  /** 测试成绩历史：最近 8 次（自检/周测/月测）正确率条 */
+  function historyHTML() {
+    var v = Store.getVocab();
+    var rows = [];
+    var kinds = [['daily', '自检'], ['weekly', '周测'], ['monthly', '月测']];
+    kinds.forEach(function (kv) {
+      var map = v.tests[kv[0]] || {};
+      for (var key in map) {
+        if (Object.prototype.hasOwnProperty.call(map, key)) {
+          rows.push({ kind: kv[1], key: key, at: map[key].at || 0,
+            total: map[key].total || 0, correct: map[key].correct || 0 });
+        }
+      }
+    });
+    if (!rows.length) return '';
+    rows.sort(function (a, b) { return b.at - a.at; });
+    var html = '<div class="vocab-history">' +
+      '<div class="accent-label">测试成绩 · 最近 ' + Math.min(8, rows.length) + ' 次</div>';
+    rows.slice(0, 8).forEach(function (r) {
+      var pct = r.total ? Math.round(r.correct / r.total * 100) : 0;
+      var label = r.key.replace(/^\d{4}-/, '');
+      html += '<div class="vh-row">' +
+        '<span class="vh-kind">' + r.kind + '</span>' +
+        '<span class="vh-key">' + esc(label) + '</span>' +
+        '<span class="vh-bar"><i style="width:' + pct + '%"></i></span>' +
+        '<span class="vh-pct' + (pct >= 80 ? ' good' : (pct < 60 ? ' bad' : '')) + '">' + pct + '%</span>' +
+      '</div>';
+    });
+    html += '</div>';
+    return html;
   }
 
   function statCell(label, n) {
@@ -198,6 +253,7 @@ var VocabUI = (function () {
     mode = null;
     revealed = false;
     triage = null;
+    test = null;
     var study = $('vocab-study');
     if (study) study.classList.add('hidden');
     var seg = document.querySelector('#view-life .life-seg');
@@ -340,6 +396,182 @@ var VocabUI = (function () {
     renderTriage();
   }
 
+  /* ==================== 测试（看英文选中文，四选一） ==================== */
+
+  var RANGES = [['today', '今日'], ['week', '本周'], ['month', '本月'],
+    ['all', '全部已学'], ['bookmarks', '生词本'], ['wrong', '错词本']];
+  var SIZES = [10, 20, 30, 50];
+
+  function startTestSetup() {
+    mode = 'test-setup';
+    testSize = Store.getVocab().settings.checkSize || 20;
+    renderTestSetup();
+  }
+
+  function renderTestSetup() {
+    takeOver();
+    var study = $('vocab-study');
+    var chips = RANGES.map(function (r) {
+      var n = Vocab.rangeCandidates(r[0], Vocab.todayStr()).length;
+      return '<button type="button" class="chip' + (testRange === r[0] ? ' active' : '') +
+        '" data-range="' + r[0] + '">' + r[1] + ' <i>' + n + '</i></button>';
+    }).join('');
+    var sizes = SIZES.map(function (n) {
+      return '<button type="button" class="chip' + (testSize === n ? ' active' : '') +
+        '" data-size="' + n + '">' + n + ' 题</button>';
+    }).join('');
+    var sel = Vocab.rangeCandidates(testRange, Vocab.todayStr()).length;
+    study.innerHTML =
+      '<div class="card vocab-session-card">' +
+        '<div class="vocab-session-top">' +
+          '<button type="button" class="vocab-exit" data-act="exit">' + Icons.svg('close', 'ic-sm') + '退出</button>' +
+        '</div>' +
+        '<h3 class="vocab-sec-title">测试 · 看英文选中文</h3>' +
+        '<div class="form-row"><label class="form-label">范围</label>' +
+          '<div class="chip-row" id="test-range-chips">' + chips + '</div></div>' +
+        '<div class="form-row"><label class="form-label">题量</label>' +
+          '<div class="chip-row" id="test-size-chips">' + sizes + '</div></div>' +
+        '<button type="button" class="btn-primary vocab-start" data-act="test-begin"' +
+          (sel ? '' : ' disabled') + '>' +
+          (sel ? '开始测试（' + Math.min(sel, testSize) + ' 题）' : '这个范围还没有可测的词') + '</button>' +
+        '<p class="hint">答错会标出正确答案并回炉：该词进错词本、复习排到明天。</p>' +
+      '</div>';
+  }
+
+  function startTest(range, size) {
+    var quiz = Vocab.makeQuiz(range, size);
+    if (!quiz || !quiz.items.length) { toast('这个范围还没有可测的词'); return; }
+    var today = Vocab.todayStr();
+    var kind = range === 'today' ? 'daily' : range === 'week' ? 'weekly' : range === 'month' ? 'monthly' : null;
+    test = {
+      items: quiz.items, deck: quiz.deck, pos: 0, correct: 0, wrong: [],
+      start: Date.now(), kind: kind, key: kind ? Vocab.testKey(kind, today) : null,
+      locked: false
+    };
+    mode = 'test';
+    renderTest();
+  }
+
+  function renderTest() {
+    takeOver();
+    var item = test.items[test.pos];
+    var study = $('vocab-study');
+    var secs = Math.round((Date.now() - test.start) / 1000);
+    study.innerHTML =
+      '<div class="card vocab-session-card">' +
+        '<div class="vocab-session-top">' +
+          '<button type="button" class="vocab-exit" data-act="exit">' + Icons.svg('close', 'ic-sm') + '退出</button>' +
+          '<span class="vocab-progress">第 ' + (test.pos + 1) + ' / ' + test.items.length + ' 题 · ' +
+            Math.floor(secs / 60) + ':' + ('0' + secs % 60).slice(-2) + '</span>' +
+          '<button type="button" class="vocab-speak" data-act="speak-test">' + Icons.svg('bell', 'ic-sm') + '</button>' +
+        '</div>' +
+        '<div class="vocab-word-card vocab-quiz-card">' +
+          '<div class="vw-word">' + esc(item.word) + '</div>' +
+          (item.phon ? '<div class="vw-phon">' + esc(item.phon) + '</div>' : '') +
+        '</div>' +
+        '<div class="vocab-options" id="test-options">' +
+          item.options.map(function (zh, i) {
+            return '<button type="button" class="vocab-opt" data-opt="' + i + '">' +
+              '<span class="vo-mark">' + 'ABCD'[i] + '</span>' + esc(zh) + '</button>';
+          }).join('') +
+        '</div>' +
+        (test.locked ? '<button type="button" class="btn-primary vocab-next" data-act="test-next">下一题</button>' : '') +
+      '</div>';
+  }
+
+  function answerTest(optIdx) {
+    if (test.locked) return;
+    var item = test.items[test.pos];
+    var hit = optIdx === item.correct;
+    test.locked = true;
+    var opts = document.querySelectorAll('#test-options .vocab-opt');
+    for (var i = 0; i < opts.length; i++) {
+      var oi = Number(opts[i].getAttribute('data-opt'));
+      if (oi === item.correct) opts[i].classList.add('right');
+      else if (oi === optIdx) opts[i].classList.add('wrong-pick');
+      opts[i].disabled = true;
+    }
+    if (hit) {
+      test.correct += 1;
+      setTimeout(function () { nextTestItem(); }, 600);   // 答对 0.6 秒自动下一题
+    } else {
+      test.wrong.push(item.idx);
+      // 答错：把释义与例句再显示一遍，并给出「下一题」按钮
+      var card = document.querySelector('.vocab-quiz-card');
+      var ex = item.exEn
+        ? '<div class="vw-ex"><p class="vw-ex-en">' + Vocab.highlightExample(item.exEn, item.word) + '</p>' +
+          (item.exCn ? '<p class="vw-ex-cn">' + esc(item.exCn) + '</p>' : '') + '</div>'
+        : '';
+      card.insertAdjacentHTML('beforeend', '<div class="vw-zh vocab-answer-zh">' + esc(item.zh) + '</div>' + ex);
+      if (!document.querySelector('.vocab-next')) {
+        var quizCard = document.querySelector('.vocab-session-card');
+        quizCard.insertAdjacentHTML('beforeend',
+          '<button type="button" class="btn-primary vocab-next" data-act="test-next">下一题</button>');
+      }
+    }
+  }
+
+  function nextTestItem() {
+    test.locked = false;
+    test.pos += 1;
+    if (test.pos >= test.items.length) renderTestResult();
+    else renderTest();
+  }
+
+  function renderTestResult() {
+    takeOver();
+    var total = test.items.length;
+    var pct = total ? Math.round(test.correct / total * 100) : 0;
+    var secs = Math.round((Date.now() - test.start) / 1000);
+    var time = Math.floor(secs / 60) + ':' + ('0' + secs % 60).slice(-2);
+    // 归档（自由测试/错题再练不记录）
+    if (test.kind && test.key) {
+      Store.recordVocabTest(test.kind, test.key, {
+        total: total, correct: test.correct, wrong: test.wrong.slice(), at: Date.now()
+      });
+    }
+    // 错题回炉：进错词本 + SRS 打回（明天复习见）
+    var deck = test.deck;
+    test.wrong.forEach(function (idx) {
+      Store.vocabGrade(deck, idx, 0, Vocab.todayStr());
+    });
+    var wrongList = test.wrong.length
+      ? '<div class="vocab-wrong-list">' + test.wrong.map(function (idx) {
+          var e = Vocab.entry(deck, idx) || ['', '', ''];
+          return '<div class="vw-row"><b>' + esc(e[0]) + '</b><span>' + esc((e[2] || '').slice(0, 24)) + '</span></div>';
+        }).join('') + '</div>'
+      : '<p class="vocab-allright">全对，没有错题 🎉</p>';
+    var study = $('vocab-study');
+    study.innerHTML =
+      '<div class="card vocab-session-card">' +
+        '<div class="vocab-session-top">' +
+          '<button type="button" class="vocab-exit" data-act="exit">' + Icons.svg('close', 'ic-sm') + '返回</button>' +
+        '</div>' +
+        '<div class="vocab-finish">' +
+          '<p class="vocab-score' + (pct >= 80 ? ' good' : (pct < 60 ? ' bad' : '')) + '">' + pct + '%</p>' +
+          '<p class="vocab-finish-sub">答对 ' + test.correct + ' / ' + total + ' 题 · 用时 ' + time +
+            (test.kind === 'daily' ? ' · 已记入今日自检' : test.kind === 'weekly' ? ' · 已记入本周周测' :
+             test.kind === 'monthly' ? ' · 已记入本月月测' : '') + '</p>' +
+          wrongList +
+          (test.wrong.length
+            ? '<button type="button" class="btn-secondary btn-sm vocab-drill" data-act="test-drill">错题再练一轮</button>'
+            : '') +
+          '<button type="button" class="btn-primary vocab-start" data-act="exit">返回</button>' +
+        '</div>' +
+      '</div>';
+    mode = 'test-result';
+  }
+
+  function drillWrong() {
+    var idxs = test.wrong.slice();
+    var quiz = Vocab.makeQuiz(idxs, idxs.length);
+    if (!quiz || !quiz.items.length) { toast('错题清空了'); return; }
+    test = { items: quiz.items, deck: quiz.deck, pos: 0, correct: 0, wrong: [],
+      start: Date.now(), kind: null, key: null, locked: false };
+    mode = 'test';
+    renderTest();
+  }
+
   /* ==================== 发音 ==================== */
 
   function speak(word) {
@@ -418,6 +650,7 @@ var VocabUI = (function () {
       var a = act.getAttribute('data-act');
       if (a === 'start') startStudy();
       else if (a === 'triage') startTriage();
+      else if (a === 'test') startTestSetup();
       else if (a === 'toggle-settings') $('vocab-settings').classList.toggle('hidden');
     });
 
@@ -440,23 +673,50 @@ var VocabUI = (function () {
     });
     $('vocab-main').addEventListener('click', function (e) {
       var btn = e.target.closest('#vocab-deck-toggle .type-btn');
-      if (!btn) return;
-      Store.setVocabSettings({ deck: btn.getAttribute('data-deck') });
-      Store.vocabSetSession(null);      // 换词库清会话
-      renderMain();
-      if (window.refreshReminders) window.refreshReminders();
+      if (btn) {
+        Store.setVocabSettings({ deck: btn.getAttribute('data-deck') });
+        Store.vocabSetSession(null);      // 换词库清会话
+        renderMain();
+        if (window.refreshReminders) window.refreshReminders();
+        return;
+      }
+      var cs = e.target.closest('#vocab-checksize-chips .chip');
+      if (cs) {
+        Store.setVocabSettings({ checkSize: Number(cs.getAttribute('data-checksize')) || 20 });
+        renderMain();
+        toast('已保存');
+      }
     });
 
-    // 会话内点击（委托）
+    // 会话/测试内点击（委托）
     $('vocab-study').addEventListener('click', function (e) {
+      // 测试设置页的 chips
+      var rangeChip = e.target.closest('[data-range]');
+      if (rangeChip) { testRange = rangeChip.getAttribute('data-range'); renderTestSetup(); return; }
+      var sizeChip = e.target.closest('[data-size]');
+      if (sizeChip) { testSize = Number(sizeChip.getAttribute('data-size')) || 20; renderTestSetup(); return; }
+      // 测试答题
+      var opt = e.target.closest('[data-opt]');
+      if (opt && mode === 'test' && test && !test.locked) {
+        answerTest(Number(opt.getAttribute('data-opt')));
+        return;
+      }
       var act = e.target.closest('[data-act]');
       if (act) {
         var a = act.getAttribute('data-act');
         if (a === 'exit') { exitSession(); return; }
         if (a === 'reveal') { reveal(); return; }
+        if (a === 'test') { startTestSetup(); return; }
+        if (a === 'test-begin') { startTest(testRange, testSize); return; }
+        if (a === 'test-next') { if (test && test.locked) nextTestItem(); return; }
+        if (a === 'test-drill') { drillWrong(); return; }
         if (a === 'speak') {
           var c = Vocab.currentCard();
           if (c) speak(c.entry.word);
+          return;
+        }
+        if (a === 'speak-test') {
+          if (test && test.items[test.pos]) speak(test.items[test.pos].word);
           return;
         }
         if (a === 'speak-triage') {
@@ -483,7 +743,7 @@ var VocabUI = (function () {
 
     bindSwipe();
 
-    // 键盘：空格翻面 / 1·2·3 评分 / Esc 退出
+    // 键盘：空格翻面 / 1·2·3 评分 / 1–4 答题 / Esc 退出
     document.addEventListener('keydown', function (e) {
       if (mode === null) return;
       if (e.key === 'Escape') { exitSession(); return; }
@@ -492,6 +752,9 @@ var VocabUI = (function () {
         else if (revealed && ['1', '2', '3'].indexOf(e.key) >= 0) {
           gradeCurrentCard(Number(e.key) - 1);
         }
+      } else if (mode === 'test' && test && !test.locked &&
+                 ['1', '2', '3', '4'].indexOf(e.key) >= 0) {
+        answerTest(Number(e.key) - 1);
       }
     });
   }

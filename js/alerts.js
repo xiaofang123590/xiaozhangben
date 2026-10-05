@@ -144,6 +144,28 @@ var Alerts = (function () {
       go: { view: 'life', mod: 'vocab' } }];
   });
 
+  /** 测试提醒：学过没自检 / 周日周测 / 月末月测 */
+  register('vocab-tests', function () {
+    if (!window.Vocab || !window.VOCAB_DB) return [];
+    var today = Vocab.todayStr();
+    var st = Vocab.testStatus(today);
+    var hour = new Date().getHours();
+    var out = [];
+    if (st.studiedToday && !st.dailyDone) {
+      out.push({ id: 'test-daily', level: hour >= 20 ? 'warn' : 'info', icon: 'edit',
+        text: '今天学过词了，做个自检看看掌握情况', go: { view: 'life', mod: 'vocab' } });
+    }
+    if (st.isSunday && !st.weeklyDone) {
+      out.push({ id: 'test-weekly', level: 'warn', icon: 'edit',
+        text: '本周周测还没做，看看这一周记住了多少', go: { view: 'life', mod: 'vocab' } });
+    }
+    if (st.monthEnd && !st.monthlyDone) {
+      out.push({ id: 'test-monthly', level: 'warn', icon: 'edit',
+        text: '月测还没做，月底检验一下这个月的成果', go: { view: 'life', mod: 'vocab' } });
+    }
+    return out;
+  });
+
   /** 备份：超过 7 天未导出（黄） */
   register('backup', function () {
     var b = Store.getLastBackupAt();

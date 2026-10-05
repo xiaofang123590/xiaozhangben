@@ -252,6 +252,187 @@ var Vocab = (function () {
     return html;
   }
 
+  // ==================== 测试出题引擎（阶段 4） ====================
+
+  var POS_RE = /^(n\.|v\.|adj\.|adv\.|prep\.|conj\.|pron\.|num\.|int\.|art\.)/;
+
+  /** 该周周一 'YYYY-MM-DD' / 该月 'YYYY-MM' */
+  function weekKey(today) {
+    return weekStartStr(today);
+  }
+  function weekStartStr(today) {
+    var d = new Date(today + 'T00:00:00');
+    d.setDate(d.getDate() - (d.getDay() + 6) % 7);
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+  function monthKey(today) {
+    return today.slice(0, 7);
+  }
+  /** 是否处于月末提醒窗口（最后 margin+1 天内） */
+  function isMonthEnd(today, margin) {
+    var d = new Date(today + 'T00:00:00');
+    var last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    return d.getDate() >= last - margin;
+  }
+
+  function shuffleArr(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+    }
+    return arr;
+  }
+
+  /**
+   * 测试范围的候选词下标
+   * @param {string} range 'today'|'week'|'month'|'all'|'bookmarks'|'wrong'
+   */
+  function rangeCandidates(range, today) {
+    var v = Store.getVocab();
+    var deck = v.settings.deck;
+    var prog = v.progress[deck] || {};
+    var out = [];
+    var todayOrd = dayOrdinal(today);
+    var weekOrd = dayOrdinal(weekStartStr(today));
+    var monthOrd = dayOrdinal(today.slice(0, 8) + '01');
+    function collect(obj, filter) {
+      for (var k in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, k)) {
+          var idx = Number(k);
+          if (!isFinite(idx) || !entry(deck, idx)) continue;
+          if (!filter || filter(obj[k], idx)) out.push(idx);
+        }
+      }
+    }
+    if (range === 'today') collect(prog, function (p) { return p.t === todayOrd; });
+    else if (range === 'week') collect(prog, function (p) { return isFinite(p.t) && p.t >= weekOrd; });
+    else if (range === 'month') collect(prog, function (p) { return isFinite(p.t) && p.t >= monthOrd; });
+    else if (range === 'all') collect(prog, function () { return true; });
+    else if (range === 'bookmarks') collect(v.bookmarks[deck] || {}, function () { return true; });
+    else if (range === 'wrong') collect(v.wrong[deck] || {}, function () { return true; });
+    // 去重（月测 = 本月 + 错词本 的并集）
+    return out.filter(function (x, i) { return out.indexOf(x) === i; });
+  }
+
+  /**
+   * 生成一份测试卷：看英文选中文，四选一。
+   * 干扰项优先同词性（释义首段 n./v./adj.…）、释义文本不重复。
+   * @param {string|number[]} rangeOrIdxs 范围名 或 指定词下标（错题再练）
+   * @param {number} size 题量
+   * @returns {{deck:string, items:Array, range:string}|null} 空范围返回 null
+   */
+  function makeQuiz(rangeOrIdxs, size) {
+    var v = Store.getVocab();
+    var deck = v.settings.deck;
+    var list = DB[deck] || [];
+    var idxs = Array.isArray(rangeOrIdxs)
+      ? rangeOrIdxs.filter(function (i) { return entry(deck, i); })
+      : rangeCandidates(rangeOrIdxs, todayStr());
+    if (!idxs.length) return null;
+    shuffleArr(idxs);
+    var n = Math.min(size || 20, idxs.length);
+    // 词性池（构建一次，同词性干扰项优先）
+    var posMap = {};
+    for (var i = 0; i < list.length; i++) {
+      var m = POS_RE.exec(list[i][2] || '');
+      var pos = m ? m[1] : 'other';
+      (posMap[pos] = posMap[pos] || []).push(i);
+    }
+    var items = [];
+    for (var j = 0; j < n; j++) {
+      var idx = idxs[j];
+      var e = list[idx];
+      var pm = POS_RE.exec(e[2] || '');
+      var same = (posMap[pm ? pm[1] : 'other'] || []).slice();
+      shuffleArr(same);
+      var opts = [e[2]];
+      for (var k = 0; k < same.length && opts.length < 4; k++) {
+        var oi = same[k];
+        if (oi !== idx && opts.indexOf(list[oi][2]) === -1) opts.push(list[oi][2]);
+      }
+      // 同词性不够：从全库补
+      for (var q = 0; opts.length < 4 && q < list.length; q++) {
+        if (q !== idx && opts.indexOf(list[q][2]) === -1) opts.push(list[q][2]);
+      }
+      // 选项乱序并记录正确位置
+      var correctZh = opts[0];
+      shuffleArr(opts);
+      items.push({
+        idx: idx,
+        word: e[0],
+        phon: e[1],
+        zh: e[2],
+        exEn: e[4] || '',
+        exCn: e[5] || '',
+        options: opts,
+        correct: opts.indexOf(correctZh)
+      });
+    }
+    return { deck: deck, items: items, range: Array.isArray(rangeOrIdxs) ? 'drill' : rangeOrIdxs };
+  }
+
+  /** 本周/本月测试是否已做（提醒用） */
+  function testStatus(today) {
+    var v = Store.getVocab();
+    var day = v.stats.daily[today] || { n: 0, r: 0 };
+    return {
+      studiedToday: (day.n + day.r) > 0,
+      dailyDone: !!v.tests.daily[today],
+      weeklyDone: !!v.tests.weekly[weekStartStr(today)],
+      monthlyDone: !!v.tests.monthly[monthKey(today)],
+      isSunday: new Date(today + 'T00:00:00').getDay() === 0,
+      monthEnd: isMonthEnd(today, 1)
+    };
+  }
+
+  /** 本周/本月测试的归档键（测试结束时写入） */
+  function testKey(kind, today) {
+    return kind === 'daily' ? today : kind === 'weekly' ? weekStartStr(today) : monthKey(today);
+  }
+
+  /**
+   * 备考联动：绑定考试后的进度预测。
+   * remaining = 还没掌握的词（学习中 + 未学）；建议每日 = ceil(剩余/剩余天数)；
+   * speed7 = 近 7 天新词均速；etaDays = 按该速度还需的天数。
+   * @returns {Object|null} 未绑定或事件已删返回 null
+   */
+  function examProgress() {
+    var v = Store.getVocab();
+    var eid = v.settings.examEventId;
+    if (!eid || !window.Days) return null;
+    var evs = Store.getDays().events;
+    var ev = null;
+    for (var i = 0; i < evs.length; i++) {
+      if (evs[i].id === eid) { ev = evs[i]; break; }
+    }
+    if (!ev) return null;
+    var today = todayStr();
+    var c = Days.eventCountdown(ev, today);
+    var daysLeft = c.today ? 0 : (c.past ? -c.n : c.n);
+    var st = deckStats(v.settings.deck);
+    var remaining = st.unlearned + st.learning;
+    var perDay = (daysLeft > 0 && remaining > 0) ? Math.ceil(remaining / daysLeft) : null;
+    var speedSum = 0;
+    for (var d = 0; d < 7; d++) {
+      var ds = Days.addDays(today, -d);
+      var day = v.stats.daily[ds];
+      if (day) speedSum += day.n;
+    }
+    var speed = Math.round(speedSum / 7 * 10) / 10;
+    var etaDays = (speed > 0 && remaining > 0) ? Math.ceil(remaining / speed) : null;
+    return {
+      title: ev.title,
+      icon: ev.icon || '🎓',
+      daysLeft: daysLeft,
+      past: c.past,
+      today: c.today,
+      remaining: remaining,
+      perDay: perDay,
+      speed: speed,
+      etaDays: etaDays
+    };
+  }
+
   return {
     todayStr: todayStr,
     dayOrdinal: dayOrdinal,
@@ -265,6 +446,14 @@ var Vocab = (function () {
     triageQueue: triageQueue,
     autoCheckHabit: autoCheckHabit,
     highlightExample: highlightExample,
+    weekKey: weekKey,
+    monthKey: monthKey,
+    isMonthEnd: isMonthEnd,
+    makeQuiz: makeQuiz,
+    rangeCandidates: rangeCandidates,
+    testStatus: testStatus,
+    testKey: testKey,
+    examProgress: examProgress,
     INTERVALS: INTERVALS,
     MASTERED_BOX: MASTERED_BOX
   };

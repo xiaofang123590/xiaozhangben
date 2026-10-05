@@ -1117,7 +1117,7 @@ var Store = (function () {
     return {
       records: d.records.map(copyRecord), // 记录深拷贝，含 items 明细
       categories: d.categories.map(copyObj),
-      budgets: { monthly: d.budgets.monthly },
+      budgets: { monthly: d.budgets.monthly, byCategory: copyObj(d.budgets.byCategory || {}) },
       diet: {
         profile: d.diet.profile ? copyObj(d.diet.profile) : null,
         entries: d.diet.entries.map(copyObj),
@@ -1130,6 +1130,16 @@ var Store = (function () {
           return cc;
         })
       },
+      days: {
+        events: d.days.events.map(copyObj),
+        habits: d.days.habits.map(function (h) {
+          var hh = copyObj(h);
+          hh.records = copyObj(h.records);
+          return hh;
+        }),
+        settings: copyObj(d.days.settings)
+      },
+      vocab: JSON.parse(JSON.stringify(d.vocab)),
       lastBackupAt: d.lastBackupAt
     };
   }
@@ -2216,7 +2226,8 @@ var Store = (function () {
     else if (g === 1) box = Math.max(1, box - 1);
     else box = 1;
     var ord = Math.round(new Date(d + 'T00:00:00').getTime() / 86400000);
-    prog[key] = { b: box, d: ord + INTERVALS[box], l: (prev && isFinite(prev.l) ? prev.l : 0) + (g === 0 ? 1 : 0) };
+    // t = 最近一次评分的"日序数"（每日自检/周测/月测按它圈范围）
+    prog[key] = { b: box, d: ord + INTERVALS[box], l: (prev && isFinite(prev.l) ? prev.l : 0) + (g === 0 ? 1 : 0), t: ord };
     if (g === 0) {
       var w = v.wrong[deck];
       var wc = (w[key] && isFinite(w[key].c)) ? w[key].c : 0;
@@ -2273,6 +2284,30 @@ var Store = (function () {
   /** 学习会话持久化（中途退出可续）；传 null 清除 */
   function vocabSetSession(session) {
     getData().vocab.session = session || null;
+    persist();
+  }
+
+  /**
+   * 记录一次测试成绩（每日自检 / 周测 / 月测）。
+   * @param {string} kind 'daily' | 'weekly' | 'monthly'
+   * @param {string} key  daily=日期 / weekly=该周周一 / monthly='YYYY-MM'
+   * @param {{total:number, correct:number, wrong:number[], at:number}} result
+   */
+  function recordVocabTest(kind, key, result) {
+    if (kind !== 'daily' && kind !== 'weekly' && kind !== 'monthly') {
+      throw new Error('测试类型不合法');
+    }
+    if (typeof key !== 'string' || !key) {
+      throw new Error('测试键不合法');
+    }
+    var r = result || {};
+    var wrong = Array.isArray(r.wrong) ? r.wrong.slice(0, 200) : [];
+    getData().vocab.tests[kind][key] = {
+      total: Math.max(0, Math.round(Number(r.total) || 0)),
+      correct: Math.max(0, Math.round(Number(r.correct) || 0)),
+      wrong: wrong,
+      at: isFinite(Number(r.at)) ? Number(r.at) : Date.now()
+    };
     persist();
   }
 
@@ -2828,6 +2863,7 @@ var Store = (function () {
     vocabSetKnown: vocabSetKnown,
     vocabToggleBookmark: vocabToggleBookmark,
     vocabSetSession: vocabSetSession,
+    recordVocabTest: recordVocabTest,
     // 统计
     getMonthSummary: getMonthSummary,
     getMonthlyTrend: getMonthlyTrend,

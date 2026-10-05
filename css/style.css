@@ -4666,3 +4666,135 @@ body[data-mode="dark"] .accent-card[data-accent="sakura"] .accent-preview {
 .vocab-finish .empty-title { margin: 10px 0 4px; }
 .vocab-finish .btn-primary { margin-top: 18px; }
 .vocab-finish-sub { margin: 0; font-size: 14px; color: var(--text-sub); }
+/* ---- 41.1 阶段4：测试体系 ---- */
+.vocab-sec-title { margin: 0 0 12px; font-size: 16px; color: var(--text-main); }
+#test-range-chips .chip i {
+  font-style: normal;
+  margin-left: 3px;
+  font-size: 11px;
+  color: var(--text-decor);
+  font-variant-numeric: tabular-nums;
+}
+.vocab-options { display: grid; gap: 9px; margin-top: 14px; }
+.vocab-opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  padding: 13px 14px;
+  border: none;
+  border-radius: 12px;
+  background: var(--bg-input);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--text-main);
+  font-size: 14px;
+  line-height: 1.5;
+  transition: transform 0.1s, box-shadow 0.15s;
+}
+.vocab-opt:not(:disabled):active { transform: scale(0.98); }
+.vocab-opt .vo-mark {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--text-grey);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.vocab-opt.right {
+  background: rgba(var(--primary-rgb), 0.14);
+  box-shadow: inset 0 0 0 1.5px var(--primary);
+  color: var(--primary-deep);
+  font-weight: 600;
+}
+.vocab-opt.right .vo-mark { background: var(--primary); color: var(--on-primary); box-shadow: none; }
+.vocab-opt.wrong-pick {
+  background: rgba(250, 81, 81, 0.10);
+  box-shadow: inset 0 0 0 1.5px var(--danger);
+  color: var(--danger);
+}
+.vocab-opt:disabled { cursor: default; }
+.vocab-next { width: 100%; margin-top: 12px; }
+.vocab-quiz-card { cursor: default; }
+.vocab-answer-zh { border-top: 1px dashed var(--line); }
+
+/* 结算 */
+.vocab-score {
+  margin: 6px 0 2px;
+  font-size: 58px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+.vocab-score.good { color: var(--primary); }
+.vocab-score.bad { color: var(--danger); }
+.vocab-wrong-list {
+  margin: 14px 0 4px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--bg-input);
+  text-align: left;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.vw-row {
+  display: flex;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--line);
+}
+.vw-row:last-child { border-bottom: none; }
+.vw-row b { color: var(--text-main); flex-shrink: 0; }
+.vw-row span { color: var(--text-grey); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vocab-allright { margin: 14px 0 0; font-size: 15px; color: var(--primary-deep); font-weight: 600; }
+.vocab-drill { margin: 12px 0 6px; }
+
+/* 成绩历史条 */
+.vocab-history { margin-top: 14px; }
+.vh-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 12px;
+}
+.vh-kind { flex-shrink: 0; width: 30px; color: var(--text-grey); }
+.vh-key {
+  flex-shrink: 0;
+  width: 46px;
+  color: var(--text-sub);
+  font-variant-numeric: tabular-nums;
+}
+.vh-bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.vh-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--primary);
+}
+.vh-pct {
+  flex-shrink: 0;
+  width: 38px;
+  text-align: right;
+  color: var(--text-sub);
+  font-variant-numeric: tabular-nums;
+}
+.vh-pct.good { color: var(--primary-deep); font-weight: 600; }
+.vh-pct.bad { color: var(--danger); font-weight: 600; }
+/* ---- 41.2 阶段5：备考联动预测 ---- */
+.vocab-eta-ok { color: var(--primary-deep); }
+.vocab-eta-ok b { color: var(--primary-deep); }
+.vocab-eta-bad { color: #C96D14; }
