@@ -298,11 +298,10 @@
         <button id="add-event-btn" class="btn-secondary day-add-btn"><svg class="ic ic-sm"><use href="#i-plus"></use></svg>新建纪念日 / 倒计时</button>
       </div>
 
-      <!-- 背单词模块：常态内容 + 学习会话（全屏接管）
-           lg-noscrub：会话内的横向手势归学习卡，不触发底栏随手拖切页 -->
+      <!-- 背单词模块：常态内容（学习会话层挂在 body 层，见 #modal-record 前——
+           fixed 元素放在滚动容器内部会被 iOS 按容器定位，压不住顶栏） -->
       <div id="life-vocab" class="life-mod hidden">
         <div id="vocab-main"></div>
-        <div id="vocab-study" class="lg-noscrub hidden"></div>
       </div>
 
       <!-- 饮食模块（原独立饮食页整体并入；内部元素 id 与逻辑零改动） -->
@@ -452,6 +451,11 @@
     <button class="tab" data-view="manage"><svg class="ic tab-icon"><use href="#i-manage"></use></svg><span class="tab-label">管理</span></button>
   </nav>
 </div>
+
+<!-- 背单词学习会话层：挂 body 层（与下方弹窗同模式）。
+     fixed 层放在 #app-main 滚动容器内部时，iOS 会按容器而非视口定位，
+     顶部压不住「生活」标题；lg-noscrub 同时防全局拖动切页误劫持 -->
+<div id="vocab-study" class="lg-noscrub hidden"></div>
 
 <!-- 记录编辑弹窗 -->
 <div id="modal-record" class="modal hidden">
