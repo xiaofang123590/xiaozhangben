@@ -81,6 +81,20 @@ var HomeUI = (function () {
     $('home-greet').textContent = greet;
     $('home-date').textContent =
       (d.getMonth() + 1) + '月' + d.getDate() + '日 · ' + WEEKS[d.getDay()];
+    // 农历落款（方案三 §6.4）：「农历八月廿六 · 宜记一笔」；Lunar 缺失或异常时整行隐藏
+    var alm = $('home-almanac');
+    if (alm) {
+      var lunarTxt = '';
+      try {
+        if (window.Lunar) lunarTxt = Lunar.lunarText(Lunar.solarToLunar(Store.todayStr())) || '';
+      } catch (e) { /* 忽略：落款是装饰性行，失败不挡首页 */ }
+      if (lunarTxt) {
+        alm.textContent = lunarTxt + ' · 宜记一笔';
+        alm.hidden = false;
+      } else {
+        alm.hidden = true;
+      }
+    }
   }
 
   /** 焦点卡：优先最近的考试/纪念日倒计时；没有事件时显示本月支出 */

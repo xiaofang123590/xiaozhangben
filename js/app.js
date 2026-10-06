@@ -275,34 +275,37 @@ function flashNumbers() {
 
 /* ================= 主题（明暗 data-mode × 风格 data-accent 双维度） ================= */
 
-var ACCENTS = ['mint', 'ocean', 'sunset', 'dusk', 'ink', 'celadon', 'graphite', 'sakura'];
-var ACCENT_NAMES = {
-  mint: '薄荷绿', ocean: '深海蓝', sunset: '落日橙', dusk: '暮山紫', ink: '墨玉黑金',
-  celadon: '青瓷', graphite: '石墨', sakura: '樱花'
-};
+var ACCENTS = ['paper', 'obsidian', 'cream'];
+var ACCENT_NAMES = { paper: '纸墨', obsidian: '曜石', cream: '奶油' };
 var ACCENT_DESC = {
-  mint: '清透薄荷 · 轻盈日常', ocean: '深海静蓝 · 专注理性', sunset: '落日暖橙 · 热烈有温度',
-  dusk: '暮山雾紫 · 浪漫温柔', ink: '玄黑鎏金 · 沉稳贵气', celadon: '釉色青瓷 · 温润清雅',
-  graphite: '极简石墨 · 冷静克制', sakura: '樱花柔粉 · 轻盈治愈'
+  paper: '宣纸为底 · 文人账本', obsidian: '曜石夜航 · 极光玻璃', cream: '奶油手账 · 治愈果冻'
 };
 
-var PREF = { mode: 'auto', accent: 'mint' };   // 用户偏好：mode = auto | light | dark
+/** 旧 8 色板 → 三主题一次性迁移（方案四 P0）：老用户首启自动归入最近人格 */
+var ACCENT_MIGRATE = {
+  mint: 'paper', celadon: 'paper', graphite: 'paper', ink: 'paper',
+  ocean: 'obsidian', dusk: 'obsidian', sunset: 'cream', sakura: 'cream'
+};
+
+var PREF = { mode: 'auto', accent: 'paper' };   // 用户偏好：mode = auto | light | dark
 var mqDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
 
 function themeKey() { return 'jz_theme::' + (Store.storageUser() || ''); }
 
-/** 读取偏好：兼容旧版纯字符串（'auto'/'light'/'dark'）与新版 JSON {mode, accent} */
+/** 读取偏好：兼容旧版纯字符串（'auto'/'light'/'dark'）、旧 8 色板与新版 JSON {mode, accent} */
 function loadThemePref() {
   try {
     var raw = localStorage.getItem(themeKey());
-    if (!raw) return { mode: 'auto', accent: 'mint' };
-    if (raw === 'auto' || raw === 'light' || raw === 'dark') return { mode: raw, accent: 'mint' };
+    if (!raw) return { mode: 'auto', accent: 'paper' };
+    if (raw === 'auto' || raw === 'light' || raw === 'dark') return { mode: raw, accent: 'paper' };
     var o = JSON.parse(raw);
+    var acc = o && o.accent;
+    if (ACCENT_MIGRATE[acc]) acc = ACCENT_MIGRATE[acc];   // 旧色板 → 三主题
     return {
       mode: (o && ['auto', 'light', 'dark'].indexOf(o.mode) >= 0) ? o.mode : 'auto',
-      accent: (o && ACCENTS.indexOf(o.accent) >= 0) ? o.accent : 'mint'
+      accent: (acc && ACCENTS.indexOf(acc) >= 0) ? acc : 'paper'
     };
-  } catch (e) { return { mode: 'auto', accent: 'mint' }; }
+  } catch (e) { return { mode: 'auto', accent: 'paper' }; }
 }
 
 function saveThemePref() {
@@ -334,7 +337,7 @@ function applyTheme(mode, silent) {
 
 /** 设置风格色板（ACCENTS 之一），与明暗维度自由组合 */
 function applyAccent(accent, silent) {
-  PREF.accent = ACCENTS.indexOf(accent) >= 0 ? accent : 'mint';
+  PREF.accent = ACCENTS.indexOf(accent) >= 0 ? accent : 'paper';
   saveThemePref();
   applyResolvedTheme(silent);
 }
@@ -382,7 +385,7 @@ function renderAccentToggle() {
     btns[i].classList.toggle('active', btns[i].getAttribute('data-accent') === PREF.accent);
   }
   var name = $('accent-name');
-  if (name) name.textContent = ACCENT_NAMES[PREF.accent] || ACCENT_NAMES.mint;
+  if (name) name.textContent = ACCENT_NAMES[PREF.accent] || ACCENT_NAMES.paper;
   var desc = $('accent-desc');
   if (desc) desc.textContent = ACCENT_DESC[PREF.accent] || '';
 }

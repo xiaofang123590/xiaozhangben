@@ -2,47 +2,47 @@
    小账本 · 本地记账 —— 全站样式（纯手写 CSS，无任何框架）
    布局：App Shell（整页不滚动；顶栏常驻 / #app-main 独立滚动 / 底栏常驻）
    手机优先（375px 基准），桌面端锁 480px 居中 + 主题色氛围底
-   主题系统：明暗 data-mode（light/dark，auto 由 JS 解析）× 风格 data-accent
-   （第 37 节色板），全部组件只引用下方语义变量。
+   主题系统：明暗 data-mode（light/dark，auto 由 JS 解析）× 三主题 data-accent
+   （第 37 节：paper 纸墨 = 默认值；obsidian 曜石 / cream 奶油），全部组件只引用下方语义变量。
    ====================================================================== */
 
 /* ----------------------------------------------------------------------
-   1. 设计变量（浅色 · 薄荷绿为默认风格）
+   1. 设计变量（浅色 · paper 纸墨为默认主题）
    ---------------------------------------------------------------------- */
 :root {
-  /* —— 品牌主色族（其他风格见第 37 节 data-accent 色板）—— */
-  --primary:        #00B578;   /* 主题薄荷绿 */
-  --primary-dark:   #00A06C;   /* hover / active */
-  --primary-deep:   #008F5F;   /* 深一档，用于浅底上的文字 */
-  --primary-light:  #E8F8F1;   /* 选中浅绿背景 */
-  --primary-border: #BFE6D4;   /* 浅绿描边 */
-  --primary-glow:   rgba(0, 181, 120, 0.14); /* focus 光晕 */
-  --primary-bright: #00C98A;   /* 渐变亮端：按钮 / 装饰共用 */
-  --primary-rgb:    0, 181, 120; /* 供 rgba(var(--primary-rgb), α) 生成主题色透明变体 */
-  --on-primary:     #FFFFFF;   /* 主色按钮上的文字（墨玉金风格换深色） */
+  /* —— 品牌主色族：paper 纸墨 · 豆青（obsidian / cream 见第 37 节）—— */
+  --primary:        #5B9E76;   /* 主题豆青 */
+  --primary-dark:   #4C8A66;   /* hover / active */
+  --primary-deep:   #33714F;   /* 深一档，用于浅底上的文字 5.7:1 */
+  --primary-light:  #EAF3EC;   /* 选中浅青背景 */
+  --primary-border: #C2D8C6;   /* 浅青描边 */
+  --primary-glow:   rgba(91, 158, 118, 0.16); /* focus 光晕 */
+  --primary-bright: #6FB88C;   /* 渐变亮端：按钮 / 装饰共用 */
+  --primary-rgb:    91, 158, 118; /* 供 rgba(var(--primary-rgb), α) 生成主题色透明变体 */
+  --on-primary:     #FFFFFF;   /* 主色按钮上的文字 */
 
-  /* 文字灰阶：每一档都按 WCAG AA（4.5:1，白底）取值，层级靠字号/字重拉开 */
-  --text-main:  #333333;       /* 主文字        12.6:1 */
-  --text-sub:   #5A635E;       /* 次要文字       6.4:1 */
-  --text-grey:  #6E7973;       /* 弱化文字       4.6:1（标签 / 小计 / 备注） */
-  --text-faint: #717B75;       /* 更弱文字       4.5:1（同上，靠字号区分） */
-  --text-decor: #9AA39E;       /* 纯装饰箭头 / 点缀，不承载文字信息 */
-  --hint-text:  #67736B;       /* 说明文字       5.0:1（12px 小字要求更高） */
-  --title-color: #223528;      /* 页面大标题（深色模式换浅色） */
+  /* 文字暖墨阶：每一档都按 WCAG AA（4.5:1，纸白底）取值，层级靠字号/字重拉开 */
+  --text-main:  #2B2721;       /* 主文字        14.6:1 */
+  --text-sub:   #5A5348;       /* 次要文字       7.5:1 */
+  --text-grey:  #6E675C;       /* 弱化文字       5.5:1（标签 / 小计 / 备注） */
+  --text-faint: #71695D;       /* 更弱文字       5.3:1（同上，靠字号区分） */
+  --text-decor: #9A9184;       /* 纯装饰箭头 / 点缀，不承载文字信息 */
+  --hint-text:  #6B6357;       /* 说明文字       5.8:1（12px 小字要求更高） */
+  --title-color: #1F1B16;      /* 页面大标题（深色模式换浅色） */
 
-  --line:     #F0F2F0;         /* 分割线 */
-  --bg-input: #F6F8F6;         /* 输入框浅底 */
-  --focus-bg: #FFFFFF;         /* 输入类 focus 底色（深色换微亮底） */
-  --placeholder: #8F9A94;      /* 占位符（格式提示，非正文；已从 1.7:1 提到 2.7:1） */
-  --empty-text: #64706A;       /* 空状态文字       5.2:1 */
-  --divider-soft: #E4ECE7;     /* 流水行两端渐隐分割线的中段色 */
+  --line:     #EAE3D5;         /* 分割线 */
+  --bg-input: #F3EEE2;         /* 输入框浅底 */
+  --focus-bg: #FFFDF8;         /* 输入类 focus 底色（深色换微亮底） */
+  --placeholder: #988F80;      /* 占位符（格式提示，非正文） */
+  --empty-text: #6B6357;       /* 空状态文字       5.8:1 */
+  --divider-soft: #E3DBC9;     /* 流水行两端渐隐分割线的中段色 */
 
-  --surface:      #FFFFFF;     /* 主表面：卡片 / 弹窗面板 / 登录卡等 */
-  --surface-2:    #F4F7F4;     /* 次级表面：流水 / 分类图标底 */
-  --surface-soft: #F5F9F6;     /* 行级 hover / active 底色 */
-  --track:        #EDF1ED;     /* 进度条 / 对比条浅灰轨道 */
-  --card-border:  #EDF2EE;     /* 卡片 1px 描边（浅色内高光） */
-  --tabbar-bg:    rgba(255, 255, 255, 0.40);   /* 液态玻璃：半透明让滚动内容透进来 */
+  --surface:      #FFFDF8;     /* 主表面：纸白（卡片 / 弹窗面板 / 登录卡等） */
+  --surface-2:    #F5F0E4;     /* 次级表面：流水 / 分类图标底 */
+  --surface-soft: #F7F2E7;     /* 行级 hover / active 底色 */
+  --track:        #EDE7D8;     /* 进度条 / 对比条浅暖轨道 */
+  --card-border:  #E8E1D0;     /* 卡片 1px 描边（浅色内高光） */
+  --tabbar-bg:    rgba(253, 250, 243, 0.46);   /* 液态玻璃镇纸：半透明纸白让滚动内容透进来 */
   --tabbar-line:  rgba(255, 255, 255, 0.65);   /* 玻璃外圈亮边 */
   --glass-sheen:  rgba(255, 255, 255, 0.45);   /* 斜向流光亮端 */
   --glass-sheen2: rgba(255, 255, 255, 0.14);   /* 斜向流光暗端 */
@@ -55,7 +55,7 @@
   /* —— 语义色：与品牌主色解耦，换任何风格色板语义都不漂移 —— */
   --positive:   #0C8049;       /* 收入 / 结余为正（固定绿，不随色板） */
   --negative:   var(--danger); /* 结余为负 / 超支 */
-  --amount:     #38403C;       /* 明细金额：中性深色，让颜色只用来表达"异常" */
+  --amount:     #3A352D;       /* 明细金额：中性暖墨，让颜色只用来表达"异常" */
   --amount-in:  var(--positive);
 
   /* —— 图表系列色（同样与色板解耦：八个风格下"支出/收入"看起来要一致） —— */
@@ -104,16 +104,26 @@
   --tip-sub:  rgba(255, 255, 255, 0.72);
   --tip-line: rgba(255, 255, 255, 0.10);
 
-  --radius-card: 16px;
-  --shadow-card:  0 2px 14px rgba(var(--primary-rgb), 0.09);   /* 柔和 + 主题色相 */
-  --shadow-float: 0 12px 30px rgba(var(--primary-rgb), 0.15);
-  --shadow-modal: 0 -8px 30px rgba(0, 0, 0, 0.12);
-  --shadow-tabbar: 0 14px 34px rgba(var(--primary-rgb), 0.16), 0 3px 10px rgba(0, 0, 0, 0.10);
-  --mask-bg:      rgba(17, 24, 20, 0.5);
+  --radius-card: 12px;         /* 裁纸圆角（paper）；obsidian 14 / cream 20 见第 37 节 */
+  --shadow-card:  0 2px 14px rgba(90, 72, 50, 0.08);    /* 暖墨柔影 */
+  --shadow-float: 0 12px 30px rgba(90, 72, 50, 0.14);
+  --shadow-modal: 0 -8px 30px rgba(50, 40, 25, 0.14);
+  --shadow-tabbar: 0 14px 34px rgba(90, 72, 50, 0.16), 0 3px 10px rgba(0, 0, 0, 0.08);
+  --mask-bg:      rgba(40, 33, 24, 0.5);
   --tabbar-h: 70px;            /* 底部导航悬浮胶囊总占位（含底部悬空距离），Toast 定位用 */
 
-  /* App Shell 的画布底色：柔和主题色渐变 */
-  --bg-page: linear-gradient(180deg, #DFF4E9 0%, #F2FAF5 45%, #FDFEFD 100%);
+  /* —— paper 纸墨签名令牌（obsidian / cream 不使用，P1 皮肤接手）—— */
+  --seal-red:     #C23B22;     /* 朱砂印泥（印章 / 封账线专用，禁止用于超支语义） */
+  --seal-red-deep:#A93018;     /* 朱砂按压态 */
+  --ledger-rule:  rgba(194, 59, 34, 0.10); /* 账簿红线（流水行间） */
+  --paper-fold:   rgba(90, 72, 50, 0.14);  /* 今天卡折角色（浅色） */
+  --paper-grain:  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+
+  /* —— 展示层字体（仅 ≥18px 展示元素；账目/正文保持系统栈，见第 44 节）—— */
+  --font-display: "LXGW WenKai Screen", "Kaiti SC", "STKaiti", "KaiTi", "Noto Serif SC", serif;
+
+  /* App Shell 的画布底色：宣纸渐变 + 纸纹 */
+  --bg-page: var(--paper-grain) repeat, linear-gradient(180deg, #F6F1E6 0%, #FAF6EC 45%, #FBF8F0 100%);
 }
 
 /* ----------------------------------------------------------------------
@@ -139,7 +149,8 @@ body {
   background:
     radial-gradient(900px 620px at 12% -8%, rgba(var(--primary-rgb), 0.16), transparent 62%),
     radial-gradient(820px 620px at 92% 108%, rgba(var(--primary-rgb), 0.11), transparent 60%),
-    #EDF3EF;
+    var(--paper-grain) repeat,
+    #F0EBDD;
   overflow: hidden;              /* 整页不滚动，滚动交给 #app-main */
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
@@ -1796,7 +1807,8 @@ body.standalone-ios #app-header {
    - 深色模式只有一份实现：body[data-mode="dark"] 覆盖变量（第 30 节），
      data-theme="auto" 由 JS 解析系统深色后写入实际 data-mode，
      旧版 @media 副本（原第 32 / 34.12 节）已删除。
-   - 风格色板见第 37 节 body[data-accent]，只覆盖品牌色与背景/表面色调。
+   - 三主题见第 37 节 body[data-accent]（paper 默认 / obsidian / cream），覆盖品牌族、
+     文字阶、表面、玻璃 tint、阴影、圆角与画布；语义色与图表色三主题共享。
    ====================================================================== */
 
 /* ----------------------------------------------------------------------
@@ -1804,48 +1816,48 @@ body.standalone-ios #app-header {
    只覆盖设计变量 + 少数组件微调；写死浅色的基础规则已全部 token 化。
    ---------------------------------------------------------------------- */
 body[data-mode="dark"] {
-  /* 主题绿提亮一档以适配深底（其他风格的深色值见第 37 节） */
-  --primary-dark:   #00C985;
-  --primary-deep:   #2BD48F;
-  --primary-light:  #16362B;               /* 选中态深绿底 */
-  --primary-border: #2C5F4B;
-  --primary-glow:   rgba(0, 181, 120, 0.25);
+  /* paper 砚墨深色值（obsidian / cream 的深色变体见第 37 节） */
+  --primary-dark:   #6FB88C;
+  --primary-deep:   #8CCBA6;               /* 深色下提亮，用作文字 ~9:1 */
+  --primary-light:  #2A3327;               /* 选中态深青底 */
+  --primary-border: #46584A;
+  --primary-glow:   rgba(91, 158, 118, 0.28);
 
-  --text-main:  #E8ECEA;                   /* 主文字 */
-  --text-sub:   #9DB0A7;                   /* 次文字 */
-  --text-grey:  #8A9C93;                   /* 弱化文字（深色下 5.4:1） */
-  --text-faint: #7E8F87;                   /* 更弱文字（深色下 4.6:1） */
-  --text-decor: #5A6A62;                   /* 纯装饰箭头 / 点缀 */
-  --hint-text:  #8A9C93;                   /* 说明文字 */
-  --title-color: #D8E8DF;
+  --text-main:  #EDE8DE;                   /* 暖纸白主文字 13.6:1 */
+  --text-sub:   #B3AC9E;                   /* 次文字 */
+  --text-grey:  #A39B8B;                   /* 弱化文字（深色下 ~6:1） */
+  --text-faint: #9A9284;                   /* 更弱文字（深色下 ~5.4:1） */
+  --text-decor: #6B6458;                   /* 纯装饰箭头 / 点缀 */
+  --hint-text:  #A39B8B;                   /* 说明文字 */
+  --title-color: #E5DECF;
 
-  --line:     #2A352F;                     /* 分割线 */
-  --bg-input: #232E29;                     /* 输入框底 */
-  --focus-bg: #2A3630;                     /* 输入 focus 微亮底 */
-  --placeholder: #64756D;
-  --empty-text: #8FA096;
-  --divider-soft: #2C3833;
+  --line:     #322D26;                     /* 分割线 */
+  --bg-input: #262119;                     /* 输入框底 */
+  --focus-bg: #2E2921;                     /* 输入 focus 微亮底 */
+  --placeholder: #756C5C;
+  --empty-text: #A39B8B;
+  --divider-soft: #343028;
 
-  /* 语义色：深色下提亮，语义与浅色一致 */
+  /* 语义色：深色下提亮，语义与浅色一致（三主题共享） */
   --positive: #3FC98C;
-  --amount:   #E8ECEA;
+  --amount:   #EDE8DE;
   --cat-tint-alpha: 0.22;                  /* 深底上分类色需要更浓才看得清 */
   --chart-expense:  #FF8A5C;               /* 深底上提亮一档 */
   --chart-warn:     #FFB020;
 
   /* 深色下的数据浮层：改浅底深字，否则和深背景糊在一起 */
-  --tip-bg:   rgba(238, 245, 242, 0.97);
-  --tip-text: #16211C;
-  --tip-sub:  rgba(22, 33, 28, 0.62);
+  --tip-bg:   rgba(240, 234, 222, 0.97);
+  --tip-text: #201C15;
+  --tip-sub:  rgba(32, 28, 21, 0.62);
   --tip-line: rgba(0, 0, 0, 0.06);
 
-  /* 表面 / 轨道 */
-  --surface:      #1C2622;                 /* 卡片表面 */
-  --surface-2:    #26322C;
-  --surface-soft: #232E29;
-  --track:        #26312B;
-  --card-border:  #2A352F;
-  --tabbar-bg:    rgba(26, 36, 31, 0.48);
+  /* 表面 / 轨道（砚墨） */
+  --surface:      #211E19;                 /* 卡片表面 */
+  --surface-2:    #2B2721;
+  --surface-soft: #28241E;
+  --track:        #2B2721;
+  --card-border:  #322D26;
+  --tabbar-bg:    rgba(28, 25, 20, 0.50);
   --tabbar-line:  rgba(255, 255, 255, 0.13);
   --glass-sheen:  rgba(255, 255, 255, 0.10);
   --glass-sheen2: rgba(255, 255, 255, 0.03);
@@ -1864,17 +1876,23 @@ body[data-mode="dark"] {
   --over-line: rgba(250, 81, 81, 0.35);
 
   /* 阴影加重 */
-  --shadow-card:  0 2px 12px rgba(0, 0, 0, 0.4);
-  --shadow-float: 0 10px 28px rgba(0, 0, 0, 0.55);
-  --shadow-modal: 0 -8px 30px rgba(0, 0, 0, 0.5);
-  --shadow-tabbar: 0 14px 34px rgba(0, 0, 0, 0.50), 0 3px 10px rgba(0, 0, 0, 0.35);
-  --mask-bg:      rgba(6, 10, 8, 0.66);
+  --shadow-card:  0 2px 12px rgba(15, 11, 6, 0.4);
+  --shadow-float: 0 10px 28px rgba(15, 11, 6, 0.55);
+  --shadow-modal: 0 -8px 30px rgba(15, 11, 6, 0.5);
+  --shadow-tabbar: 0 14px 34px rgba(15, 11, 6, 0.50), 0 3px 10px rgba(0, 0, 0, 0.35);
+  --mask-bg:      rgba(12, 9, 5, 0.66);
+
+  /* paper 签名令牌（深色） */
+  --ledger-rule:  rgba(220, 120, 96, 0.14);
+  --paper-fold:   rgba(233, 222, 198, 0.10);  /* 今天卡折角色（砚墨下为亮折痕） */
+  --paper-grain:  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
 
   color-scheme: dark;                      /* 日期选择器 / 下拉等原生控件跟随深色 */
 
-  /* 页面背景：深色渐变 */
-  --bg-page: linear-gradient(180deg, #14201B 0%, #101814 55%, #0F1512 100%);
+  /* 页面背景：砚墨渐变 + 纸纹 */
+  --bg-page: var(--paper-grain) repeat, linear-gradient(180deg, #1D1914 0%, #171310 55%, #14100D 100%);
 }
+
 
 /* 根元素 color-scheme：视口滚动条等跟随深色 */
 html:has(body[data-mode="dark"]) { color-scheme: dark; }
@@ -1884,7 +1902,7 @@ body[data-mode="dark"] {
   background:
     radial-gradient(900px 620px at 12% -8%, rgba(var(--primary-rgb), 0.13), transparent 62%),
     radial-gradient(820px 620px at 92% 108%, rgba(var(--primary-rgb), 0.09), transparent 60%),
-    #0C120F;
+    #12100C;
 }
 
 /* 深色下的少数组件微调（其余全部由上面的变量接管） */
@@ -2847,310 +2865,231 @@ body[data-mode="dark"] .cat-icon {
 }
 
 /* ======================================================================
-   37. 风格色板（body[data-accent]）
-   每套只覆盖品牌主色族 + 页面背景 + 深色表面色调，其余全部继承；
-   浅色块在前，配套深色块（叠加 [data-mode="dark"]）紧随其后。
-   JS 把用户选择写到 body[data-accent]，与明暗维度自由组合。
+   37. 三主题（body[data-accent] = paper | obsidian | cream）
+   paper 纸墨 = 本文件 :root 默认值 + 第 30 节深色块，无需独立区块；
+   obsidian 曜石 / cream 奶油 各两块：浅色 (0,1,1) + 深色 (0,2,1)。
+   只覆盖品牌族 / 文字阶 / 表面线条 / 玻璃 tint / 阴影 / 圆角 / 画布；
+   语义色（positive / danger / warn / over）、图表色、tip、cat-tint 不在此声明，
+   三主题共享第 1 节与第 30 节的值——换皮不漂移。
+   源顺序约束：本节必须位于第 30 节深色块之后、prefers-contrast 块之前。
    ====================================================================== */
 
-/* ---- 37.1 深海蓝 ocean ---- */
-body[data-accent="ocean"] {
-  --primary:        #2E7CF6;
-  --primary-dark:   #2568D9;
-  --primary-deep:   #1E5FCB;
-  --primary-light:  #E8F0FE;
-  --primary-border: #BBD4FB;
-  --primary-glow:   rgba(46, 124, 246, 0.14);
-  --primary-bright: #4D96FF;
-  --primary-rgb:    46, 124, 246;
-  --title-color:    #1C2A3E;
-  --bg-page: linear-gradient(180deg, #E1ECFE 0%, #F2F7FE 45%, #FDFEFF 100%);
+/* ---- 37.1 obsidian 曜石 · 浅色「晨雾」---- */
+body[data-accent="obsidian"] {
+  --primary:        #4F5BD5;
+  --primary-dark:   #4450C4;
+  --primary-deep:   #3A44B8;   /* 浅底文字 ~7.8:1 */
+  --primary-light:  #EAECFC;
+  --primary-border: #C5CAF4;
+  --primary-glow:   rgba(79, 91, 213, 0.16);
+  --primary-bright: #6E7FF3;
+  --primary-rgb:    79, 91, 213;
+  --on-primary:     #FFFFFF;
+
+  --text-main:  #23262F;
+  --text-sub:   #4D5464;
+  --text-grey:  #5C6373;
+  --text-faint: #5F6675;
+  --text-decor: #9098AB;
+  --hint-text:  #565D6D;
+  --title-color: #161922;
+
+  --line:     #E4E7F0;
+  --bg-input: #EFF1F8;
+  --focus-bg: #FFFFFF;
+  --placeholder: #8A90A2;
+  --empty-text: #5C6373;
+  --divider-soft: #DDE0EC;
+
+  --surface:      #FFFFFF;
+  --surface-2:    #EEF0F7;
+  --surface-soft: #F0F2F9;
+  --track:        #E4E7F0;
+  --card-border:  #E0E3EE;
+  --tabbar-bg:    rgba(255, 255, 255, 0.42);
+
+  --radius-card: 14px;
+  --shadow-card:  0 2px 14px rgba(38, 44, 90, 0.10);
+  --shadow-float: 0 12px 30px rgba(38, 44, 90, 0.16);
+  --shadow-modal: 0 -8px 30px rgba(20, 24, 44, 0.14);
+  --shadow-tabbar: 0 14px 34px rgba(38, 44, 90, 0.18), 0 3px 10px rgba(0, 0, 0, 0.08);
+  --mask-bg:      rgba(20, 24, 44, 0.5);
+
+  --font-display: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Courier New", monospace;
+
+  /* 画布：冷白 + 两团静态极光（只铺画布，不进数据表面）；壳外氛围底同源 */
+  --bg-page:
+    radial-gradient(640px 420px at 86% -6%, rgba(110, 127, 243, 0.16), transparent 62%),
+    radial-gradient(520px 400px at -8% 104%, rgba(34, 211, 238, 0.12), transparent 58%),
+    linear-gradient(180deg, #EEF1F9 0%, #F5F7FC 50%, #FAFBFE 100%);
+  background:
+    radial-gradient(900px 620px at 12% -8%, rgba(110, 127, 243, 0.18), transparent 62%),
+    radial-gradient(820px 620px at 92% 108%, rgba(34, 211, 238, 0.10), transparent 60%),
+    #EEF1F9;
 }
-body[data-accent="ocean"][data-mode="dark"] {
-  --primary:        #4D96FF;
-  --primary-dark:   #6FA8FF;
-  --primary-deep:   #86B7FF;
-  --primary-light:  #16283F;
-  --primary-border: #2B4A75;
-  --primary-glow:   rgba(77, 150, 255, 0.22);
-  --primary-bright: #6FA8FF;
-  --primary-rgb:    77, 150, 255;
-  --title-color:    #D4E2F7;
 
-  --line:     #263143;
-  --bg-input: #1B2534;
-  --focus-bg: #202B3D;
-  --placeholder: #63718A;
-  --empty-text: #8A99B5;
-  --divider-soft: #2B3A50;
+/* ---- 37.2 obsidian 曜石 · 深色「夜航」（主模式）---- */
+body[data-accent="obsidian"][data-mode="dark"] {
+  --primary:        #6E7FF3;
+  --primary-dark:   #8692FF;
+  --primary-deep:   #9AA6FF;   /* 深底文字 ~7.7:1 */
+  --primary-light:  #23264D;
+  --primary-border: #3B4080;
+  --primary-glow:   rgba(110, 127, 243, 0.30);
+  --primary-bright: #8692FF;
+  --primary-rgb:    110, 127, 243;
+  --on-primary:     #FFFFFF;
 
-  --surface:      #161D2A;
-  --surface-2:    #1E2736;
-  --surface-soft: #1B2432;
-  --track:        #1E2836;
-  --card-border:  #263143;
-  --tabbar-bg:    rgba(22, 30, 46, 0.48);
-  --tabbar-line:  rgba(255, 255, 255, 0.13);
+  --text-main:  #EDEFF5;
+  --text-sub:   #A6ADBF;
+  --text-grey:  #949BAD;
+  --text-faint: #8B92A4;
+  --text-decor: #565D70;
+  --hint-text:  #949BAD;
+  --title-color: #E2E6F2;
 
-  --bg-page: linear-gradient(180deg, #131C2B 0%, #0F1622 55%, #0D121C 100%);
+  --line:     rgba(255, 255, 255, 0.07);
+  --bg-input: #1E2230;
+  --focus-bg: #232839;
+  --placeholder: #5E6579;
+  --empty-text: #949BAD;
+  --divider-soft: rgba(255, 255, 255, 0.08);
+
+  --surface:      #171A24;
+  --surface-2:    #1F2330;
+  --surface-soft: #1C2030;
+  --track:        #232839;
+  --card-border:  rgba(255, 255, 255, 0.09);
+  --tabbar-bg:    rgba(18, 21, 32, 0.55);
+
+  --radius-card: 14px;
+  --shadow-card:  0 0 24px rgba(94, 106, 210, 0.15);
+  --shadow-float: 0 8px 32px rgba(4, 6, 12, 0.55), 0 0 24px rgba(94, 106, 210, 0.12);
+  --shadow-modal: 0 -8px 30px rgba(4, 6, 12, 0.6);
+  --shadow-tabbar: 0 14px 34px rgba(4, 6, 12, 0.55), 0 0 20px rgba(94, 106, 210, 0.18);
+  --mask-bg:      rgba(4, 6, 12, 0.7);
+
+  --font-display: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Courier New", monospace;
+
+  --amount: #EDEFF5;
+
+  /* 画布：曜石黑 + 靛蓝/青两团静态极光 */
+  --bg-page:
+    radial-gradient(720px 500px at 86% -10%, rgba(94, 106, 210, 0.30), transparent 62%),
+    radial-gradient(560px 440px at -8% 106%, rgba(34, 211, 238, 0.13), transparent 58%),
+    linear-gradient(180deg, #0C0E15 0%, #0B0D13 55%, #0A0C11 100%);
+  background:
+    radial-gradient(900px 620px at 12% -8%, rgba(94, 106, 210, 0.22), transparent 62%),
+    radial-gradient(820px 620px at 92% 108%, rgba(34, 211, 238, 0.10), transparent 60%),
+    #0A0C11;
 }
 
-/* ---- 37.2 落日橙 sunset ---- */
-body[data-accent="sunset"] {
-  --primary:        #F2622F;
-  --primary-dark:   #E05524;
-  --primary-deep:   #D64A1E;
-  --primary-light:  #FEEFE7;
-  --primary-border: #FFD0B8;
-  --primary-glow:   rgba(242, 98, 47, 0.14);
+/* ---- 37.3 cream 奶油 · 浅色「手账」（主模式）---- */
+body[data-accent="cream"] {
+  --primary:        #F0683E;
+  --primary-dark:   #E05A31;
+  --primary-deep:   #BC4A20;   /* 纸白文字 ~5:1 */
+  --primary-light:  #FFEDE3;
+  --primary-border: #FFD2BC;
+  --primary-glow:   rgba(240, 104, 62, 0.16);
   --primary-bright: #FF8A5C;
-  --primary-rgb:    242, 98, 47;
-  --title-color:    #3A2318;
-  --bg-page: linear-gradient(180deg, #FDE9DC 0%, #FEF5EE 45%, #FFFEFD 100%);
-}
-body[data-accent="sunset"][data-mode="dark"] {
-  --primary:        #FF8A5C;
-  --primary-dark:   #FF9C74;
-  --primary-deep:   #FFAD8A;
-  --primary-light:  #3A241A;
-  --primary-border: #6E3F28;
-  --primary-glow:   rgba(255, 138, 92, 0.22);
-  --primary-bright: #FF9C74;
-  --primary-rgb:    255, 138, 92;
-  --title-color:    #F7DED2;
+  --primary-rgb:    240, 104, 62;
+  --on-primary:     #FFFFFF;
 
-  --line:     #33261F;
-  --bg-input: #241A14;
-  --focus-bg: #2B1F18;
-  --placeholder: #7A6A60;
-  --empty-text: #A08B7F;
-  --divider-soft: #372A22;
+  --text-main:  #4A3F35;
+  --text-sub:   #6E6154;
+  --text-grey:  #7E7161;
+  --text-faint: #7A6D58;
+  --text-decor: #B0A492;
+  --hint-text:  #756A58;
+  --title-color: #3A3128;
 
-  --surface:      #1D1611;
-  --surface-2:    #271D16;
-  --surface-soft: #241A14;
-  --track:        #271D16;
-  --card-border:  #2E221A;
-  --tabbar-bg:    rgba(34, 22, 15, 0.48);
-  --tabbar-line:  rgba(255, 255, 255, 0.13);
+  --line:     #F3E7D7;
+  --bg-input: #F9F1E4;
+  --focus-bg: #FFFDF9;
+  --placeholder: #A89880;
+  --empty-text: #7E7161;
+  --divider-soft: #F0E3D2;
 
-  --bg-page: linear-gradient(180deg, #201510 0%, #190F0B 55%, #140C09 100%);
-}
+  --surface:      #FFFDF9;
+  --surface-2:    #FBF3E8;
+  --surface-soft: #FDF6EC;
+  --track:        #F3EADC;
+  --card-border:  #FFE3CE;   /* P1 起升为 3px 厚描边（Claymorphism） */
+  --tabbar-bg:    rgba(255, 251, 244, 0.46);
 
-/* ---- 37.3 暮山紫 dusk ---- */
-body[data-accent="dusk"] {
-  --primary:        #8B6CF0;
-  --primary-dark:   #7A5BE0;
-  --primary-deep:   #6F4FD6;
-  --primary-light:  #F0EBFE;
-  --primary-border: #D4C6FB;
-  --primary-glow:   rgba(139, 108, 240, 0.14);
-  --primary-bright: #A78BFA;
-  --primary-rgb:    139, 108, 240;
-  --title-color:    #2A2140;
-  --bg-page: linear-gradient(180deg, #E9E3FD 0%, #F4F1FE 45%, #FEFDFF 100%);
-}
-body[data-accent="dusk"][data-mode="dark"] {
-  --primary:        #A78BFA;
-  --primary-dark:   #B79DFB;
-  --primary-deep:   #C6B0FC;
-  --primary-light:  #241B3B;
-  --primary-border: #443466;
-  --primary-glow:   rgba(167, 139, 250, 0.22);
-  --primary-bright: #B79DFB;
-  --primary-rgb:    167, 139, 250;
-  --title-color:    #D9CFF5;
+  --radius-card: 20px;
+  --shadow-card:  0 6px 16px rgba(255, 142, 92, 0.10), inset 0 2px 0 rgba(255, 255, 255, 0.9);
+  --shadow-float: 0 12px 28px rgba(240, 104, 62, 0.16), inset 0 2px 0 rgba(255, 255, 255, 0.9);
+  --shadow-modal: 0 -8px 30px rgba(80, 50, 30, 0.14);
+  --shadow-tabbar: 0 14px 34px rgba(240, 104, 62, 0.18), 0 3px 10px rgba(0, 0, 0, 0.06);
+  --mask-bg:      rgba(60, 40, 26, 0.5);
 
-  --line:     #2A2340;
-  --bg-input: #1E1930;
-  --focus-bg: #241E3A;
-  --placeholder: #6F6890;
-  --empty-text: #958DBA;
-  --divider-soft: #2E2749;
+  --font-display: ui-rounded, "SF Pro Rounded", "Yuanti SC", "YouYuan", "Microsoft YaHei", sans-serif;
 
-  --surface:      #171226;
-  --surface-2:    #1F1932;
-  --surface-soft: #1C1730;
-  --track:        #1F1932;
-  --card-border:  #261F3D;
-  --tabbar-bg:    rgba(26, 19, 42, 0.48);
-  --tabbar-line:  rgba(255, 255, 255, 0.13);
-
-  --bg-page: linear-gradient(180deg, #161126 0%, #110D1D 55%, #0E0B18 100%);
+  --bg-page: linear-gradient(180deg, #FFF3E6 0%, #FFF8EF 48%, #FFFAF4 100%);
+  background:
+    radial-gradient(900px 620px at 12% -8%, rgba(240, 104, 62, 0.12), transparent 62%),
+    radial-gradient(820px 620px at 92% 108%, rgba(255, 170, 120, 0.10), transparent 60%),
+    #FBEFE2;
 }
 
-/* ---- 37.4 墨玉黑金 ink（浅色 = 米纸金棕；深色 = 玄黑鎏金，主色按钮文字换深色） ---- */
-body[data-accent="ink"] {
-  --primary:        #9C7A2E;
-  --primary-dark:   #8A6A25;
-  --primary-deep:   #7A5D1E;
-  --primary-light:  #F6F0DD;
-  --primary-border: #E3D5AC;
-  --primary-glow:   rgba(184, 146, 66, 0.16);
-  --primary-bright: #B8923F;
-  --primary-rgb:    184, 146, 66;
-  --title-color:    #2E2A1E;
-  --bg-page: linear-gradient(180deg, #F3EDDC 0%, #F9F5EA 45%, #FEFDF8 100%);
-}
-body[data-accent="ink"][data-mode="dark"] {
-  --primary:        #D9A441;
-  --primary-dark:   #E2B35B;
-  --primary-deep:   #EAC06F;
-  --primary-light:  #2A2313;
-  --primary-border: #5A4A1E;
-  --primary-glow:   rgba(217, 164, 65, 0.22);
-  --primary-bright: #E2B35B;
-  --primary-rgb:    217, 164, 65;
-  --on-primary:     #201805;
-  --title-color:    #EFE6CF;
+/* ---- 37.4 cream 奶油 · 深色「可可」---- */
+body[data-accent="cream"][data-mode="dark"] {
+  --primary:        #FF9A75;
+  --primary-dark:   #FFAD8E;
+  --primary-deep:   #FFB494;   /* 可可底文字 ~9:1 */
+  --primary-light:  #3A2A20;
+  --primary-border: #5C4232;
+  --primary-glow:   rgba(255, 154, 117, 0.28);
+  --primary-bright: #FFAD8E;
+  --primary-rgb:    255, 154, 117;
+  --on-primary:     #3A241A;   /* 蜜桃按钮上用深可可字 */
 
-  --line:     #26282F;
-  --bg-input: #1B1D23;
-  --focus-bg: #22242B;
-  --placeholder: #6B6E78;
-  --empty-text: #8F929C;
-  --divider-soft: #2C2F37;
+  --text-main:  #F3EAE0;
+  --text-sub:   #C4B6A5;
+  --text-grey:  #B3A493;
+  --text-faint: #A99A89;
+  --text-decor: #7A6C5C;
+  --hint-text:  #B3A493;
+  --title-color: #EFE3D4;
 
-  --surface:      #17181D;
-  --surface-2:    #1F2127;
-  --surface-soft: #1C1E24;
-  --track:        #23252C;
-  --card-border:  #26282F;
-  --tabbar-bg:    rgba(30, 25, 18, 0.48);
-  --tabbar-line:  rgba(255, 255, 255, 0.13);
+  --line:     rgba(255, 205, 160, 0.12);
+  --bg-input: #332920;
+  --focus-bg: #3A2F23;
+  --placeholder: #8A7A66;
+  --empty-text: #B3A493;
+  --divider-soft: rgba(255, 205, 160, 0.13);
 
-  --bg-page: linear-gradient(180deg, #101014 0%, #0C0D10 55%, #0A0B0E 100%);
-}
+  --surface:      #2C231B;
+  --surface-2:    #372C21;
+  --surface-soft: #332920;
+  --track:        #3A2F23;
+  --card-border:  rgba(255, 205, 160, 0.14);
+  --tabbar-bg:    rgba(38, 30, 23, 0.55);
 
-/* ---- 37.5 青瓷 celadon（浅色 = 釉色青瓷；深色 = 墨青，温润清雅） ---- */
-body[data-accent="celadon"] {
-  --primary:        #3D8C7F;
-  --primary-dark:   #2F7A6E;
-  --primary-deep:   #276A5F;
-  --primary-light:  #E4F1EE;
-  --primary-border: #BCDCD5;
-  --primary-glow:   rgba(61, 140, 127, 0.14);
-  --primary-bright: #57A99A;
-  --primary-rgb:    61, 140, 127;
-  --title-color:    #26403A;
-  --bg-page: linear-gradient(180deg, #DCEFEB 0%, #EFF8F6 45%, #FBFEFD 100%);
-}
-body[data-accent="celadon"][data-mode="dark"] {
-  --primary:        #5FB3A4;
-  --primary-dark:   #79C3B5;
-  --primary-deep:   #93D0C4;
-  --primary-light:  #15302B;
-  --primary-border: #2B4E47;
-  --primary-glow:   rgba(95, 179, 164, 0.22);
-  --primary-bright: #79C3B5;
-  --primary-rgb:    95, 179, 164;
-  --title-color:    #CCE7E0;
+  --radius-card: 20px;
+  --shadow-card:  0 2px 12px rgba(10, 6, 3, 0.4), inset 0 2px 0 rgba(255, 255, 255, 0.06);
+  --shadow-float: 0 10px 28px rgba(10, 6, 3, 0.55);
+  --shadow-modal: 0 -8px 30px rgba(10, 6, 3, 0.5);
+  --shadow-tabbar: 0 14px 34px rgba(10, 6, 3, 0.50), 0 3px 10px rgba(0, 0, 0, 0.35);
+  --mask-bg:      rgba(15, 9, 5, 0.66);
 
-  --line:     #243934;
-  --bg-input: #1A2B27;
-  --focus-bg: #1F332E;
-  --placeholder: #61766F;
-  --empty-text: #87A096;
-  --divider-soft: #2A403A;
+  --font-display: ui-rounded, "SF Pro Rounded", "Yuanti SC", "YouYuan", "Microsoft YaHei", sans-serif;
 
-  --surface:      #152320;
-  --surface-2:    #1C2D29;
-  --surface-soft: #192724;
-  --track:        #1F312C;
-  --card-border:  #243934;
-  --tabbar-bg:    rgba(24, 37, 33, 0.48);
-  --tabbar-line:  rgba(255, 255, 255, 0.13);
+  --amount: #F3EAE0;
 
-  --bg-page: linear-gradient(180deg, #12201C 0%, #0E1917 55%, #0B1311 100%);
-}
-
-/* ---- 37.6 石墨 graphite（浅色 = 石板灰；深色 = 银灰，主色按钮文字换深色） ---- */
-body[data-accent="graphite"] {
-  --primary:        #4B5563;
-  --primary-dark:   #3F4856;
-  --primary-deep:   #343C48;
-  --primary-light:  #EDF0F4;
-  --primary-border: #D2D8E0;
-  --primary-glow:   rgba(75, 85, 99, 0.13);
-  --primary-bright: #6B7686;
-  --primary-rgb:    75, 85, 99;
-  --title-color:    #23272E;
-  --bg-page: linear-gradient(180deg, #E6E9EE 0%, #F3F5F8 45%, #FDFDFE 100%);
-}
-body[data-accent="graphite"][data-mode="dark"] {
-  --primary:        #A8B3C4;
-  --primary-dark:   #BAC4D3;
-  --primary-deep:   #CCD5E1;
-  --primary-light:  #232832;
-  --primary-border: #3A424F;
-  --primary-glow:   rgba(168, 179, 196, 0.20);
-  --primary-bright: #BAC4D3;
-  --primary-rgb:    168, 179, 196;
-  --on-primary:     #171A20;
-  --title-color:    #DCE2EB;
-
-  --line:     #292F39;
-  --bg-input: #1C2129;
-  --focus-bg: #222831;
-  --placeholder: #69717F;
-  --empty-text: #8D95A3;
-  --divider-soft: #2E3540;
-
-  --surface:      #16191F;
-  --surface-2:    #1E232B;
-  --surface-soft: #1A1E25;
-  --track:        #20262E;
-  --card-border:  #292F39;
-  --tabbar-bg:    rgba(25, 29, 36, 0.48);
-  --tabbar-line:  rgba(255, 255, 255, 0.13);
-
-  --bg-page: linear-gradient(180deg, #14171C 0%, #101317 55%, #0C0E12 100%);
-}
-
-/* ---- 37.7 樱花 sakura（浅色 = 樱花粉；深色 = 夜樱，轻盈治愈） ---- */
-body[data-accent="sakura"] {
-  --primary:        #C95B84;
-  --primary-dark:   #B84E75;
-  --primary-deep:   #A64467;
-  --primary-light:  #FBE9F0;
-  --primary-border: #F0C7D7;
-  --primary-glow:   rgba(201, 91, 132, 0.14);
-  --primary-bright: #DE7CA0;
-  --primary-rgb:    201, 91, 132;
-  --title-color:    #3C2630;
-  --bg-page: linear-gradient(180deg, #FBE6EF 0%, #FDF2F7 45%, #FFFEFF 100%);
-}
-body[data-accent="sakura"][data-mode="dark"] {
-  --primary:        #E77CA6;
-  --primary-dark:   #EE93B6;
-  --primary-deep:   #F3AAC7;
-  --primary-light:  #341D27;
-  --primary-border: #593144;
-  --primary-glow:   rgba(231, 124, 166, 0.20);
-  --primary-bright: #EE93B6;
-  --primary-rgb:    231, 124, 166;
-  --title-color:    #F3DAE4;
-
-  --line:     #372631;
-  --bg-input: #261A20;
-  --focus-bg: #2E2028;
-  --placeholder: #816370;
-  --empty-text: #A88B97;
-  --divider-soft: #392833;
-
-  --surface:      #211820;
-  --surface-2:    #2A1F28;
-  --surface-soft: #251C23;
-  --track:        #2B2029;
-  --card-border:  #372631;
-  --tabbar-bg:    rgba(37, 26, 33, 0.48);
-  --tabbar-line:  rgba(255, 255, 255, 0.13);
-
-  --bg-page: linear-gradient(180deg, #1D141A 0%, #170F15 55%, #120C10 100%);
+  --bg-page: linear-gradient(180deg, #241C15 0%, #1E1712 55%, #1B150F 100%);
+  background:
+    radial-gradient(900px 620px at 12% -8%, rgba(255, 154, 117, 0.10), transparent 62%),
+    radial-gradient(820px 620px at 92% 108%, rgba(255, 170, 120, 0.06), transparent 60%),
+    #1D1610;
 }
 
 /* ----------------------------------------------------------------------
-   38. 外观设置：风格色板选择器（管理页「外观」卡片）
+   38. 外观设置：主题选择器（管理页「外观」卡片）
        每套色板是一张「迷你手机屏」预览卡：卡面底色 = 该色板的页面背景、
        小卡片 = 该色板的卡片表面、圆点与胶囊 = 该色板主色；跟随当前明暗
        自动切换浅/深预览（见本节末尾的 --pv-* 预览色表）。
@@ -3173,7 +3112,7 @@ body[data-accent="sakura"][data-mode="dark"] {
 
 .accent-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px 8px;
 }
 
@@ -3269,76 +3208,36 @@ body[data-mode="dark"] .pv-line { background: rgba(255, 255, 255, 0.18); }
   font-weight: 600;
 }
 
-/* ---- 预览色表：与第 37 节各色板一一对应（浅色版在前，深色版跟随 data-mode） ---- */
-.accent-card[data-accent="mint"] .accent-preview {
-  --pv-bg: linear-gradient(180deg, #DFF4E9 0%, #FDFEFD 100%);
-  --pv-card: #FFFFFF; --pv-accent: #00B578;
+/* ---- 预览色表：与三主题一一对应（浅色版在前，深色版跟随 data-mode） ---- */
+.accent-card[data-accent="paper"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #F6F1E6 0%, #FBF8F0 100%);
+  --pv-card: #FFFDF8; --pv-accent: #5B9E76;
 }
-body[data-mode="dark"] .accent-card[data-accent="mint"] .accent-preview {
-  --pv-bg: linear-gradient(180deg, #14201B 0%, #0F1512 100%);
-  --pv-card: #1C2622; --pv-accent: #00B578;
+body[data-mode="dark"] .accent-card[data-accent="paper"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #1D1914 0%, #14100D 100%);
+  --pv-card: #211E19; --pv-accent: #5B9E76;
 }
-.accent-card[data-accent="ocean"] .accent-preview {
-  --pv-bg: linear-gradient(180deg, #E1ECFE 0%, #FDFEFF 100%);
-  --pv-card: #FFFFFF; --pv-accent: #2E7CF6;
+.accent-card[data-accent="obsidian"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #EEF1F9 0%, #FAFBFE 100%);
+  --pv-card: #FFFFFF; --pv-accent: #4F5BD5;
 }
-body[data-mode="dark"] .accent-card[data-accent="ocean"] .accent-preview {
-  --pv-bg: linear-gradient(180deg, #131C2B 0%, #0D121C 100%);
-  --pv-card: #161D2A; --pv-accent: #4D96FF;
+body[data-mode="dark"] .accent-card[data-accent="obsidian"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #0C0E15 0%, #0A0C11 100%);
+  --pv-card: #171A24; --pv-accent: #6E7FF3;
 }
-.accent-card[data-accent="sunset"] .accent-preview {
-  --pv-bg: linear-gradient(180deg, #FDE9DC 0%, #FFFEFD 100%);
-  --pv-card: #FFFFFF; --pv-accent: #F2622F;
+.accent-card[data-accent="cream"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #FFF3E6 0%, #FFFAF4 100%);
+  --pv-card: #FFFDF9; --pv-accent: #F0683E;
 }
-body[data-mode="dark"] .accent-card[data-accent="sunset"] .accent-preview {
-  --pv-bg: linear-gradient(180deg, #201510 0%, #140C09 100%);
-  --pv-card: #1D1611; --pv-accent: #FF8A5C;
-}
-.accent-card[data-accent="dusk"] .accent-preview {
-  --pv-bg: linear-gradient(180deg, #E9E3FD 0%, #FEFDFF 100%);
-  --pv-card: #FFFFFF; --pv-accent: #8B6CF0;
-}
-body[data-mode="dark"] .accent-card[data-accent="dusk"] .accent-preview {
-  --pv-bg: linear-gradient(180deg, #161126 0%, #0E0B18 100%);
-  --pv-card: #171226; --pv-accent: #A78BFA;
-}
-.accent-card[data-accent="ink"] .accent-preview {
-  --pv-bg: linear-gradient(180deg, #F3EDDC 0%, #FEFDF8 100%);
-  --pv-card: #FFFFFF; --pv-accent: #9C7A2E;
-}
-body[data-mode="dark"] .accent-card[data-accent="ink"] .accent-preview {
-  --pv-bg: linear-gradient(180deg, #101014 0%, #0A0B0E 100%);
-  --pv-card: #17181D; --pv-accent: #D9A441;
-}
-.accent-card[data-accent="celadon"] .accent-preview {
-  --pv-bg: linear-gradient(180deg, #DCEFEB 0%, #FBFEFD 100%);
-  --pv-card: #FFFFFF; --pv-accent: #3D8C7F;
-}
-body[data-mode="dark"] .accent-card[data-accent="celadon"] .accent-preview {
-  --pv-bg: linear-gradient(180deg, #12201C 0%, #0B1311 100%);
-  --pv-card: #152320; --pv-accent: #5FB3A4;
-}
-.accent-card[data-accent="graphite"] .accent-preview {
-  --pv-bg: linear-gradient(180deg, #E6E9EE 0%, #FDFDFE 100%);
-  --pv-card: #FFFFFF; --pv-accent: #4B5563;
-}
-body[data-mode="dark"] .accent-card[data-accent="graphite"] .accent-preview {
-  --pv-bg: linear-gradient(180deg, #14171C 0%, #0C0E12 100%);
-  --pv-card: #16191F; --pv-accent: #A8B3C4;
-}
-.accent-card[data-accent="sakura"] .accent-preview {
-  --pv-bg: linear-gradient(180deg, #FBE6EF 0%, #FFFEFF 100%);
-  --pv-card: #FFFFFF; --pv-accent: #C95B84;
-}
-body[data-mode="dark"] .accent-card[data-accent="sakura"] .accent-preview {
-  --pv-bg: linear-gradient(180deg, #1D141A 0%, #120C10 100%);
-  --pv-card: #211820; --pv-accent: #E77CA6;
+body[data-mode="dark"] .accent-card[data-accent="cream"] .accent-preview {
+  --pv-bg: linear-gradient(180deg, #241C15 0%, #1B150F 100%);
+  --pv-card: #2C231B; --pv-accent: #FF9A75;
 }
 
 /* ======================================================================
    39. 记账页英雄卡（#hero-card，JS 渲染：#hero-*）
    —— 本页唯一的主角：本月支出大数字 + 环比 + 收入结余 + 近 7 天迷你柱 + 预算进度
-   所有颜色走 token，深浅模式与八套色板自动适配。
+   所有颜色走 token，深浅模式与三主题自动适配。
    ====================================================================== */
 .hero-card {
   /* 右上角一层主题色柔光：让英雄卡与普通卡片拉开层次 */
@@ -4963,3 +4862,164 @@ body[data-mode="dark"] .accent-card[data-accent="sakura"] .accent-preview {
 
 /* ---- 43.5 测试设置卡 ---- */
 .vocab-setup-card { width: 100%; }
+
+/* ======================================================================
+   44. 三主题签名皮肤（方案四 P1）：展示字体 / 打卡章 / 英雄数字 / 账簿红线
+   全部是 body[data-accent] 作用域的表层覆盖：组件 DOM 与 JS 不变，
+   弹簧动画（habitPop 等）与触达尺寸全主题共用。
+   ====================================================================== */
+
+/* ---- 44.1 展示层字体接入（仅 ≥18px 展示元素；金额/账目/正文保持原栈） ---- */
+/* paper：文楷栈（系统楷体命中零下载）；楷体无 800 字重，落 700 更稳 */
+body[data-accent="paper"] :is(#page-title, .home-greet, .day-card-num .dc-n) {
+  font-family: var(--font-display);
+  letter-spacing: 0;                     /* 楷体自带节奏，关掉黑体的负字距 */
+}
+body[data-accent="paper"] .home-greet { font-weight: 700; }
+
+/* cream：圆体栈（iOS 命中系统圆体零下载） */
+body[data-accent="cream"] :is(#page-title, .home-greet, .day-card-num .dc-n) {
+  font-family: var(--font-display);
+}
+
+/* obsidian：展示层保持系统黑体；小数据标签（日期/星期）用等宽栈 */
+body[data-accent="obsidian"] .spark-day,
+body[data-accent="obsidian"] .day-card-date,
+body[data-accent="obsidian"] .day-head {
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+/* ---- 44.2 英雄数字皮肤 ---- */
+/* obsidian：靛→青渐变字。只上记账页英雄金额；日子大数字保留用户自选事件色 */
+body[data-accent="obsidian"] .hero-amount {
+  background: linear-gradient(92deg, var(--primary-bright) 10%, #22D3EE 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* cream：日子大数字下的蜜桃短下划（纯装饰，落在 num 的 4px 下边距里） */
+body[data-accent="cream"] .day-card-num::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  bottom: -3px;
+  width: 34%;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--primary-bright), var(--primary));
+  opacity: 0.5;
+}
+
+/* ---- 44.3 打卡章三皮肤（.habit-check；habitPop 弹簧动画全主题共用） ---- */
+/* paper：朱砂方章「勤」——未打=镂空印，已打=盖印（微倾 3°，像刚落下） */
+body[data-accent="paper"] .habit-check {
+  position: relative;
+  border-radius: 7px;
+  border: 2px solid rgba(194, 59, 34, 0.5);
+}
+body[data-accent="paper"] .habit-check .ic-sm { display: none; }
+body[data-accent="paper"] .habit-check::after {
+  content: "勤";
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+  color: rgba(194, 59, 34, 0.62);
+}
+body[data-accent="paper"] .habit-check.done {
+  background: var(--seal-red);
+  border-color: var(--seal-red-deep);
+  transform: rotate(-3deg);
+  box-shadow: 0 2px 10px rgba(194, 59, 34, 0.35);
+}
+body[data-accent="paper"] .habit-check.done::after { color: #FFF6EF; }
+
+/* obsidian：霓虹圆环勾——描边环 + 已打辉光 */
+body[data-accent="obsidian"] .habit-check {
+  border: 2px solid rgba(var(--primary-rgb), 0.4);   /* 主色环：晨雾白卡与夜航深卡上均可见 */
+}
+body[data-accent="obsidian"] .habit-check.done {
+  border-color: var(--primary-bright);
+  box-shadow: 0 0 14px rgba(var(--primary-rgb), 0.45);
+}
+
+/* cream：贴纸圆章——未打厚描边，已打微倾 + 贴纸厚度 */
+body[data-accent="cream"] .habit-check {
+  border: 3px solid #FFDCC8;
+}
+body[data-accent="cream"] .habit-check.done {
+  border-color: var(--primary-dark);
+  transform: rotate(3deg);
+  box-shadow: 0 3px 0 rgba(224, 90, 49, 0.22);
+}
+
+/* ---- 44.4 paper 账簿红线：流水行分割线染朱砂（令牌见 §1，语义禁用超支红） ---- */
+body[data-accent="paper"] .record-item + .record-item {
+  border-image: linear-gradient(90deg,
+    rgba(194, 59, 34, 0) 0%,
+    var(--ledger-rule) 16%,
+    var(--ledger-rule) 84%,
+    rgba(194, 59, 34, 0) 100%) 1;
+}
+
+/* ---- 44.5 cream Claymorphism 厚描边：卡片 1px → 3px（§7.3 铁律：不进金额行/图表） ---- */
+body[data-accent="cream"] .card { border-width: 3px; }
+
+/* ---- 44.6 背单词会话层 = 暗房（方案三 §7 / 方案四 §7）：全主题统一暖炭深色，
+        主色族与语义色随主题继承；进出弹簧与手势不受影响 ---- */
+#vocab-study {
+  --text-main: #EFE9DD;  --text-sub: #B7AF9F;  --text-grey: #A79F8F;
+  --text-faint: #9E9686; --text-decor: #6E675A; --hint-text: #A79F8F;
+  --title-color: #E7E0D1; --amount: #EFE9DD; --placeholder: #756C5C;
+  --surface: #242019;    --surface-2: #2E2921; --surface-soft: #2A251D;
+  --bg-input: #2A251D;   --focus-bg: #332D24;  --track: #2E2921;
+  --line: #3A342A;       --card-border: #3A342A; --divider-soft: #3A342A;
+  background: linear-gradient(180deg, #1B1712 0%, #16120E 60%, #141110 100%);
+}
+
+/* ---- 44.7 首页农历落款（方案三 §6.4）：问候下的「农历八月廿六 · 宜记一笔」 ---- */
+.home-almanac {
+  margin: 3px 0 0;
+  font-size: var(--fs-hint);
+  color: var(--text-grey);
+  letter-spacing: 0.5px;
+}
+/* 纸墨/奶油用各自展示栈（楷/圆）；曜石保持系统黑体。装饰性短行，语义见 JS 判空降级 */
+body[data-accent="paper"] .home-almanac,
+body[data-accent="cream"] .home-almanac {
+  font-family: var(--font-display);
+  letter-spacing: 1px;
+}
+
+/* ---- 44.8 日子卡签名细节（paper）：「今天」卡折角 + 农历竖签 ---- */
+/* 折角：右上角一枚三角"折页"，::after 柔光之上、内容之下，20px 不入文字区（上内边距 20px） */
+body[data-accent="paper"] .day-card.today::before {
+  content: "";
+  position: absolute;
+  top: 0; right: 0;
+  width: 20px; height: 20px;
+  background: linear-gradient(225deg, var(--paper-fold) 50%, transparent 50%);
+  filter: drop-shadow(-1px 1px 1px rgba(90, 72, 50, 0.18));
+  pointer-events: none;
+}
+/* 农历竖签：≤3 字短签竖排如小签条（仅 paper；其他主题水平沿用 .day-card-tag） */
+body[data-accent="paper"] .day-card-tag.tag-vertical {
+  writing-mode: vertical-rl;
+  letter-spacing: 3px;
+  line-height: 1;
+  padding: 7px 4px;
+  border-radius: 4px;
+  color: var(--seal-red);
+  background: rgba(194, 59, 34, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(194, 59, 34, 0.18);
+}
+
+/* ---- 44.9 封账双线（paper）：流水列表上下缘的老账本红线（3px double = 两道细线） ---- */
+body[data-accent="paper"] #record-list {
+  border-top: 3px double rgba(194, 59, 34, 0.30);
+  border-bottom: 3px double rgba(194, 59, 34, 0.30);
+  padding: 3px 0;
+}

@@ -132,7 +132,7 @@ var LifeUI = (function () {
       tags += '<span class="day-card-tag">' + Icons.svg('repeat', 'ic-sm') + '每月</span>';
     }
     if (ev.calendar === 'lunar' && ev.lunar) {
-      tags += '<span class="day-card-tag">' + Lunar.lunarText(ev.lunar).replace(/^农历/, '') + '</span>';
+      tags += '<span class="day-card-tag tag-vertical">' + Lunar.lunarText(ev.lunar).replace(/^农历/, '') + '</span>';
     }
     if (ev.pinned) {
       tags += '<span class="day-card-tag">' + Icons.svg('pin', 'ic-sm') + '置顶</span>';

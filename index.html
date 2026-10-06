@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
 <title>小账本 · 本地记账</title>
-<meta name="theme-color" content="#00B578">
+<meta name="theme-color" content="#5B9E76">
 <!-- PWA / iPhone 添加到主屏幕 -->
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="mobile-web-app-capable" content="yes">
@@ -74,6 +74,7 @@
       <div class="home-head">
         <p class="home-greet" id="home-greet">你好</p>
         <p class="home-date" id="home-date"></p>
+        <p class="home-almanac" id="home-almanac" hidden></p>
       </div>
       <!-- 焦点卡：默认最近的考试/纪念日倒计时，没有则显示本月支出（home-ui.js 渲染） -->
       <div id="home-focus"></div>
@@ -414,7 +415,7 @@
         </div>
         <p class="hint">打开小账本时默认进入的页面。</p>
         <div class="accent-block">
-          <div class="accent-label">主题风格 · <b id="accent-name">薄荷绿</b><span class="accent-desc" id="accent-desc"></span></div>
+          <div class="accent-label">主题 · <b id="accent-name">纸墨</b><span class="accent-desc" id="accent-desc"></span></div>
           <div class="accent-grid" id="accent-toggle"></div>
         </div>
       </div>
